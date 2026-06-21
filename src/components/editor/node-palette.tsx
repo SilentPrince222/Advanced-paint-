@@ -9,13 +9,10 @@ import {
   getVariantsByCategory,
   type UiBlockVariant,
 } from "@/lib/block-registry";
-import type { BlockCategory } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 interface PaletteDragPayload {
-  category: BlockCategory;
-  variantId: string;
-  label: string;
+  type: string;
 }
 
 export function NodePalette() {
@@ -27,11 +24,7 @@ export function NodePalette() {
     event: DragEvent<HTMLDivElement>,
     variant: UiBlockVariant,
   ) => {
-    const payload: PaletteDragPayload = {
-      category: variant.category,
-      variantId: variant.variantId,
-      label: variant.label,
-    };
+    const payload: PaletteDragPayload = { type: variant.type };
     event.dataTransfer.setData(
       "application/automation-builder-block",
       JSON.stringify(payload),
@@ -40,11 +33,7 @@ export function NodePalette() {
   };
 
   const handleAdd = (variant: UiBlockVariant) => {
-    addNode({
-      category: variant.category,
-      variantId: variant.variantId,
-      label: variant.label,
-    });
+    addNode({ type: variant.type });
   };
 
   return (
@@ -78,7 +67,7 @@ export function NodePalette() {
                   const Icon = variant.icon;
                   return (
                     <div
-                      key={variant.variantId}
+                      key={variant.type}
                       draggable
                       onDragStart={(event) => handleDragStart(event, variant)}
                       onClick={() => handleAdd(variant)}

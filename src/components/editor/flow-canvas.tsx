@@ -16,7 +16,7 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import { useFlowStore } from "@/lib/flow-store";
-import type { BlockCategory } from "@/lib/types";
+import { categoryOf } from "@/lib/types";
 import { BaseNode } from "./base-node";
 
 const nodeTypes: NodeTypes = { base: BaseNode };
@@ -29,9 +29,7 @@ const defaultEdgeOptions: DefaultEdgeOptions = {
 };
 
 interface DroppedPayload {
-  category?: BlockCategory;
-  label?: string;
-  variantId?: string;
+  type?: string;
 }
 
 function FlowCanvasInner() {
@@ -62,18 +60,14 @@ function FlowCanvasInner() {
       } catch {
         return;
       }
+      if (!payload.type) return;
 
       const position = screenToFlowPosition({
         x: event.clientX,
         y: event.clientY,
       });
 
-      addNode({
-        category: payload.category,
-        label: payload.label,
-        variantId: payload.variantId,
-        position,
-      });
+      addNode({ type: payload.type, position });
     },
     [addNode, screenToFlowPosition],
   );
@@ -104,9 +98,8 @@ function FlowCanvasInner() {
         pannable
         zoomable
         nodeColor={(node) => {
-          const category = (node.data as { category?: BlockCategory } | null)
-            ?.category;
-          switch (category) {
+          const type = (node.data as { type?: string } | null)?.type ?? "";
+          switch (categoryOf(type)) {
             case "trigger":
               return "#10b981";
             case "condition":

@@ -1,13 +1,10 @@
 import {
   Clock,
-  Filter,
   GitBranch,
-  ListTodo,
-  Mail,
-  type LucideIcon,
-  Webhook,
+  CreditCard,
   Send,
-  MessageSquare,
+  Webhook,
+  type LucideIcon,
 } from "lucide-react";
 import type { BlockCategory, BlockVariant } from "./types";
 
@@ -21,18 +18,19 @@ export interface UiBlockVariant extends BlockVariant {
 }
 
 /**
- * Per-category visual accent. Kept here (UI-only) so the node renderer and
- * the palette share a single source of truth.
+ * Per-category visual accent — single source of truth shared by the node
+ * renderer and the palette.
  */
 export interface CategoryStyle {
-  /** tailwind classes for the colored chip / dot */
+  /** chip / icon background + text */
   chip: string;
+  /** solid dot color */
   dot: string;
-  /** ring color used on the node card */
+  /** ring color on the node card */
   ring: string;
-  /** handle color (source/target dots) */
+  /** handle (source/target) color */
   handle: string;
-  /** human label for the category */
+  /** human label */
   label: string;
 }
 
@@ -60,84 +58,127 @@ export const CATEGORY_STYLES: Record<BlockCategory, CategoryStyle> = {
   },
 };
 
+export const CATEGORY_ORDER: BlockCategory[] = ["trigger", "action", "condition"];
+
 /**
- * The canonical block registry.
+ * The canonical block registry — the 5 demo-scope types from SPEC §2.5.
  *
- * Phase 2 ships a small fixed set of sample variants per category. Real
- * integration logic is out of scope — these are placeholders. Phase 3 will
- * attach `fields` (config schema) to each variant for the form renderer.
+ *   trigger.webhook       {}                                   // payload from inbound request
+ *   trigger.schedule      { cron }
+ *   condition.if          { expression }                       // e.g. "plan == 'pro'"
+ *   action.stripe.charge  { amount, currency }                 // credential via credentialRef
+ *   action.slack.post     { channel, message }                 // credential via credentialRef
+ *
+ * `fields` is the config schema that drives the generic SidePanel form
+ * (Phase 3) — adding a node type never touches SidePanel code.
  */
 export const BLOCK_REGISTRY: UiBlockVariant[] = [
   // ── Triggers ──────────────────────────────────────────────────────────
   {
-    variantId: "trigger.email-received",
-    category: "trigger",
-    label: "Email Received",
-    description: "Fires when a new email lands in the connected mailbox.",
-    icon: Mail,
-  },
-  {
-    variantId: "trigger.schedule",
-    category: "trigger",
-    label: "Schedule",
-    description: "Fires on a cron-style schedule (e.g. every Monday 9:00).",
-    icon: Clock,
-  },
-  {
-    variantId: "trigger.webhook",
+    type: "trigger.webhook",
     category: "trigger",
     label: "Webhook",
     description: "Fires when an external service calls the webhook URL.",
     icon: Webhook,
-  },
-
-  // ── Actions ───────────────────────────────────────────────────────────
-  {
-    variantId: "action.send-slack",
-    category: "action",
-    label: "Send Slack Message",
-    description: "Posts a message to a Slack channel.",
-    icon: Send,
+    fields: [],
   },
   {
-    variantId: "action.create-task",
-    category: "action",
-    label: "Create Task",
-    description: "Creates a task in the connected task tracker.",
-    icon: ListTodo,
-  },
-  {
-    variantId: "action.send-email",
-    category: "action",
-    label: "Send Email",
-    description: "Sends an email to one or more recipients.",
-    icon: MessageSquare,
+    type: "trigger.schedule",
+    category: "trigger",
+    label: "Schedule",
+    description: "Fires on a cron-style schedule (e.g. `0 9 * * MON`).",
+    icon: Clock,
+    fields: [
+      {
+        key: "cron",
+        label: "Cron expression",
+        type: "text",
+        placeholder: "0 9 * * MON",
+        help: "Standard 5-field cron (min hour day month weekday).",
+        defaultValue: "0 9 * * MON",
+      },
+    ],
   },
 
   // ── Conditions ────────────────────────────────────────────────────────
   {
-    variantId: "condition.if-else",
+    type: "condition.if",
     category: "condition",
-    label: "If / Else",
-    description: "Branches the flow on a true/false condition.",
+    label: "If",
+    description: "Branches the flow on a true/false expression.",
     icon: GitBranch,
+    fields: [
+      {
+        key: "expression",
+        label: "Expression",
+        type: "text",
+        placeholder: "plan == 'pro'",
+        help: "Evaluated against the run context; follow the matching edge.",
+        defaultValue: "plan == 'pro'",
+      },
+    ],
+  },
+
+  // ── Actions ───────────────────────────────────────────────────────────
+  {
+    type: "action.stripe.charge",
+    category: "action",
+    label: "Stripe Charge",
+    description: "Creates a charge via Stripe (test mode in the demo).",
+    icon: CreditCard,
+    requiresCredential: true,
+    fields: [
+      {
+        key: "amount",
+        label: "Amount",
+        type: "number",
+        placeholder: "100",
+        help: "Smallest currency unit (cents) — 100 = $1.00.",
+        defaultValue: 100,
+      },
+      {
+        key: "currency",
+        label: "Currency",
+        type: "select",
+        defaultValue: "usd",
+        options: [
+          { label: "USD", value: "usd" },
+          { label: "EUR", value: "eur" },
+          { label: "GBP", value: "gbp" },
+          { label: "KZT", value: "kzt" },
+        ],
+      },
+    ],
   },
   {
-    variantId: "condition.filter",
-    category: "condition",
-    label: "Filter",
-    description: "Lets only items matching all rules continue downstream.",
-    icon: Filter,
+    type: "action.slack.post",
+    category: "action",
+    label: "Slack Post",
+    description: "Posts a message to a Slack channel.",
+    icon: Send,
+    requiresCredential: true,
+    fields: [
+      {
+        key: "channel",
+        label: "Channel",
+        type: "text",
+        placeholder: "#revenue",
+        defaultValue: "#revenue",
+      },
+      {
+        key: "message",
+        label: "Message",
+        type: "textarea",
+        placeholder: "New charge received.",
+        defaultValue: "New charge received.",
+      },
+    ],
   },
 ];
 
-export const CATEGORY_ORDER: BlockCategory[] = ["trigger", "action", "condition"];
-
-/** Look up a variant by id. Falls back to `null` for unknown ids. */
-export function getVariant(variantId: string): UiBlockVariant | null {
-  return (
-    BLOCK_REGISTRY.find((variant) => variant.variantId === variantId) ?? null
-  );
+/** Look up a variant by canonical `type`. Returns null for unknown types. */
+export function getVariant(type: string): UiBlockVariant | null {
+  return BLOCK_REGISTRY.find((variant) => variant.type === type) ?? null;
 }
 
 /** Variants grouped by category, in canonical category order. */

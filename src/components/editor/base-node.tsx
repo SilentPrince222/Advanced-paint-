@@ -9,29 +9,55 @@ import {
   type Node,
   type NodeProps,
 } from "@xyflow/react";
-import { Trash2, Workflow } from "lucide-react";
+import { Lock, Trash2, Workflow } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { BaseNodeData, BlockCategory } from "@/lib/types";
-import { CATEGORY_STYLES, getVariant } from "@/lib/block-registry";
+import { categoryOf, type LogicNode } from "@/lib/types";
+import {
+  CATEGORY_STYLES,
+  getVariant,
+  type UiBlockVariant,
+} from "@/lib/block-registry";
 import { useFlowStore } from "@/lib/flow-store";
 
-type BaseNodeType = Node<BaseNodeData, "base">;
+type BaseNodeType = Node<LogicNode, "base">;
+
+/**
+ * Compact one-line summary of a node's primary param value, e.g.
+ * `#revenue`, `100 usd`, `plan == 'pro'`. Driven by the variant's field
+ * schema so adding a node type never touches this renderer.
+ */
+function paramSummary(variant: UiBlockVariant | null, params: Record<string, unknown>): string {
+  if (!variant || variant.fields.length === 0) return "";
+  const parts: string[] = [];
+  for (const field of variant.fields.slice(0, 2)) {
+    const value = params[field.key];
+    if (value === undefined || value === "") continue;
+    const text = field.type === "select"
+      ? field.options?.find((o) => o.value === String(value))?.label ?? String(value)
+      : String(value);
+    parts.push(text);
+  }
+  return parts.join(" · ");
+}
 
 function BaseNodeComponent({ id, data, selected }: NodeProps<BaseNodeType>) {
-  const category = (data.category ?? "action") as BlockCategory;
+  const type = data.type;
+  const category = categoryOf(type);
   const style = CATEGORY_STYLES[category];
-  const variant = data.variantId ? getVariant(data.variantId) : null;
+  const variant = getVariant(type);
   const Icon = variant?.icon ?? Workflow;
+  const label = variant?.label ?? type;
+  const requiresCredential = variant?.requiresCredential === true;
 
   const removeNode = useFlowStore((state) => state.removeNode);
   const { setNodes } = useReactFlow();
 
   const handleDelete = () => {
-    // Remove via the store (also drops connected edges) and clear any
-    // lingering React Flow selection so the deleted node isn't tracked.
     removeNode(id);
     setNodes((nodes) => nodes.filter((node) => node.id !== id));
   };
+
+  const summary = paramSummary(variant, data.params);
 
   return (
     <div
@@ -42,7 +68,6 @@ function BaseNodeComponent({ id, data, selected }: NodeProps<BaseNodeType>) {
         selected && "ring-2 ring-offset-1 ring-offset-background",
       )}
     >
-      {/* Hover toolbar with delete */}
       <NodeToolbar
         isVisible
         offset={8}
@@ -67,10 +92,7 @@ function BaseNodeComponent({ id, data, selected }: NodeProps<BaseNodeType>) {
       <Handle
         type="target"
         position={Position.Top}
-        className={cn(
-          "!h-2.5 !w-2.5 !border-2 !border-background",
-          style.handle,
-        )}
+        className={cn("!h-2.5 !w-2.5 !border-2 !border-background", style.handle)}
       />
 
       <div className="mb-1.5 flex items-center gap-2">
@@ -90,10 +112,23 @@ function BaseNodeComponent({ id, data, selected }: NodeProps<BaseNodeType>) {
         >
           {style.label}
         </span>
+        {requiresCredential && (
+          <span
+            title="Needs a credential (vault ref). Not draft-safe."
+            className="ml-auto flex items-center gap-1 rounded bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-medium text-rose-600 dark:text-rose-400"
+          >
+            <Lock className="h-2.5 w-2.5" />
+            prod
+          </span>
+        )}
       </div>
 
-      <div className="text-sm font-medium leading-tight">{data.label}</div>
-      {variant?.description ? (
+      <div className="text-sm font-medium leading-tight">{label}</div>
+      {summary ? (
+        <div className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
+          {summary}
+        </div>
+      ) : variant?.description ? (
         <div className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
           {variant.description}
         </div>
@@ -102,10 +137,7 @@ function BaseNodeComponent({ id, data, selected }: NodeProps<BaseNodeType>) {
       <Handle
         type="source"
         position={Position.Bottom}
-        className={cn(
-          "!h-2.5 !w-2.5 !border-2 !border-background",
-          style.handle,
-        )}
+        className={cn("!h-2.5 !w-2.5 !border-2 !border-background", style.handle)}
       />
     </div>
   );
