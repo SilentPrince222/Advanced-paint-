@@ -88,6 +88,9 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   },
 
   onConnect: (connection: Connection) => {
+    // Reject self-loops: a node wired to itself is never a meaningful flow.
+    if (!connection.source || !connection.target) return;
+    if (connection.source === connection.target) return;
     set({
       edges: addEdge(
         { ...connection, type: "smoothstep", animated: true },
@@ -191,21 +194,33 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     const viewByNodeId = new Map(document.views.map((v) => [v.nodeId, v]));
     const nodes: FlowNode[] = document.nodes.map((logic) => {
       const view = viewByNodeId.get(logic.id);
+      // Coerce missing `isDraftSafe` to the SPEC §6.0 default (true) so a
+      // document loaded from JSON / an older snapshot still satisfies the
+      // LogicNode boolean contract instead of carrying `undefined`.
+      const isDraftSafe = logic.isDraftSafe ?? true;
       return {
         id: logic.id,
         type: "base",
         position: { x: view?.x ?? 0, y: view?.y ?? 0 },
-        data: { ...logic },
+        data: { ...logic, isDraftSafe } as LogicNode,
       };
     });
-    const edges: FlowEdge[] = document.edges.map((logic) => ({
-      id: logic.id,
-      source: logic.fromNodeId,
-      target: logic.toNodeId,
-      type: "smoothstep",
-      animated: true,
-      data: logic.condition !== undefined ? { condition: logic.condition } : {},
-    }));
+    // Drop orphan edges: a document from the backend or a corrupted snapshot
+    // may carry an edge whose endpoint was removed. Loading it verbatim would
+    // produce a dangling React Flow edge pointing at a non-existent node.
+    const nodeIds = new Set(nodes.map((n) => n.id));
+    const edges: FlowEdge[] = document.edges
+      .filter(
+        (logic) => nodeIds.has(logic.fromNodeId) && nodeIds.has(logic.toNodeId),
+      )
+      .map((logic) => ({
+        id: logic.id,
+        source: logic.fromNodeId,
+        target: logic.toNodeId,
+        type: "smoothstep",
+        animated: true,
+        data: logic.condition !== undefined ? { condition: logic.condition } : {},
+      }));
     set({ nodes, edges });
   },
 }));

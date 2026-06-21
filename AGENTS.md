@@ -6,10 +6,11 @@ After any code change, run all of these from the project root before declaring a
 ```bash
 npx tsc --noEmit   # typecheck
 npm run lint       # eslint
+npm run test       # vitest (run mode) — store & pure-logic unit tests
 npm run build      # next build (uses Turbopack)
 ```
 
-Dev server: `npm run dev` (http://localhost:3000).
+Dev server: `npm run dev` (http://localhost:3000). Test watch: `npm run test:watch`.
 
 ## Stack
 - Next.js 16 (App Router, `src/` dir, `@/*` alias) + React 19 + TypeScript

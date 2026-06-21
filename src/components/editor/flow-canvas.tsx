@@ -17,6 +17,7 @@ import "@xyflow/react/dist/style.css";
 
 import { useFlowStore } from "@/lib/flow-store";
 import { categoryOf } from "@/lib/types";
+import { parseDropPayload } from "@/lib/drop-payload";
 import { BaseNode } from "./base-node";
 
 const nodeTypes: NodeTypes = { base: BaseNode };
@@ -27,10 +28,6 @@ const defaultEdgeOptions: DefaultEdgeOptions = {
   markerEnd: { type: MarkerType.ArrowClosed, width: 18, height: 18 },
   style: { strokeWidth: 1.75 },
 };
-
-interface DroppedPayload {
-  type?: string;
-}
 
 function FlowCanvasInner() {
   const nodes = useFlowStore((state) => state.nodes);
@@ -52,15 +49,12 @@ function FlowCanvasInner() {
       const raw = event.dataTransfer.getData(
         "application/automation-builder-block",
       );
-      if (!raw) return;
 
-      let payload: DroppedPayload;
-      try {
-        payload = JSON.parse(raw) as DroppedPayload;
-      } catch {
-        return;
-      }
-      if (!payload.type) return;
+      // Untrusted boundary: validate before touching the store. A malformed
+      // payload (`{"type":123}`) would otherwise store a non-string type and
+      // crash the node renderer in categoryOf().
+      const payload = parseDropPayload(raw);
+      if (!payload) return;
 
       const position = screenToFlowPosition({
         x: event.clientX,
