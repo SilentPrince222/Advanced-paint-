@@ -2,13 +2,12 @@
 
 import { Workflow } from "lucide-react";
 import { useFlowStore } from "@/lib/flow-store";
-import { Button } from "@/components/ui/button";
 import { NodePalette } from "./node-palette";
 import { FlowCanvas } from "./flow-canvas";
 
 export function Editor() {
-  const addNode = useFlowStore((state) => state.addNode);
   const nodeCount = useFlowStore((state) => state.nodes.length);
+  const edgeCount = useFlowStore((state) => state.edges.length);
 
   return (
     <div className="flex h-dvh w-full overflow-hidden bg-background text-foreground">
@@ -22,21 +21,20 @@ export function Editor() {
               Visual Automation Builder
             </h1>
             <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-              Phase 1 · Canvas
+              Phase 2 · Blocks &amp; Connections
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="hidden text-xs text-muted-foreground sm:inline">
-              {nodeCount} block{nodeCount === 1 ? "" : "s"}
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <span>
+              <span className="font-medium text-foreground">{nodeCount}</span>{" "}
+              block{nodeCount === 1 ? "" : "s"}
             </span>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => addNode({ category: "action", label: "Block" })}
-            >
-              Add block
-            </Button>
+            <span className="text-border">·</span>
+            <span>
+              <span className="font-medium text-foreground">{edgeCount}</span>{" "}
+              connection{edgeCount === 1 ? "" : "s"}
+            </span>
           </div>
         </header>
 

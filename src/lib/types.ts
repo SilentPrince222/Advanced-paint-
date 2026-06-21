@@ -25,15 +25,20 @@ export interface BlockFieldSchema {
 }
 
 /**
- * Definition of a block variant. The registry lives in `block-registry.ts`
- * (Phase 2) and is keyed by `variantId`.
+ * Serializable definition of a block variant.
+ *
+ * NOTE: this is the *data* shape — what gets stored per node and in version
+ * snapshots. Pure UI concerns (icon component, accent color) live on the
+ * extended `UiBlockVariant` in `block-registry.ts`, never here, so snapshots
+ * stay serializable.
+ *
+ * The runtime registry is keyed by `variantId`.
  */
 export interface BlockVariant {
   variantId: string;
   category: BlockCategory;
   label: string;
   description?: string;
-  icon?: string;
   fields?: BlockFieldSchema[];
 }
 

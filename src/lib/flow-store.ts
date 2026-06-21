@@ -2,10 +2,13 @@
 
 import { create } from "zustand";
 import {
+  addEdge,
   applyEdgeChanges,
   applyNodeChanges,
+  type Connection,
   type EdgeChange,
   type NodeChange,
+  type OnConnect,
   type OnEdgesChange,
   type OnNodesChange,
 } from "@xyflow/react";
@@ -35,8 +38,10 @@ export interface FlowState {
   edges: FlowEdge[];
   onNodesChange: OnNodesChange<FlowNode>;
   onEdgesChange: OnEdgesChange<FlowEdge>;
+  onConnect: OnConnect;
   addNode: (options?: AddNodeOptions) => string;
   removeNode: (id: string) => void;
+  removeEdge: (id: string) => void;
   setNodes: (nodes: FlowNode[]) => void;
   setEdges: (edges: FlowEdge[]) => void;
 }
@@ -53,10 +58,19 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     set({ edges: applyEdgeChanges(changes, get().edges) as FlowEdge[] });
   },
 
+  onConnect: (connection: Connection) => {
+    set({
+      edges: addEdge(
+        { ...connection, type: "smoothstep", animated: true },
+        get().edges,
+      ) as FlowEdge[],
+    });
+  },
+
   addNode: (options) => {
     const id = nextNodeId();
     const category = options?.category ?? "action";
-    const variantId = options?.variantId ?? "generic";
+    const variantId = options?.variantId ?? "action.create-task";
     const label = options?.label ?? "Block";
     const position = options?.position ?? randomPosition();
 
@@ -83,6 +97,10 @@ export const useFlowStore = create<FlowState>((set, get) => ({
         (edge) => edge.source !== id && edge.target !== id,
       ),
     });
+  },
+
+  removeEdge: (id) => {
+    set({ edges: get().edges.filter((edge) => edge.id !== id) });
   },
 
   setNodes: (nodes) => set({ nodes }),

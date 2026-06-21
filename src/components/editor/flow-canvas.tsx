@@ -5,10 +5,12 @@ import {
   Background,
   BackgroundVariant,
   Controls,
+  MarkerType,
   MiniMap,
   ReactFlow,
   ReactFlowProvider,
   useReactFlow,
+  type DefaultEdgeOptions,
   type NodeTypes,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -18,6 +20,13 @@ import type { BlockCategory } from "@/lib/types";
 import { BaseNode } from "./base-node";
 
 const nodeTypes: NodeTypes = { base: BaseNode };
+
+const defaultEdgeOptions: DefaultEdgeOptions = {
+  type: "smoothstep",
+  animated: true,
+  markerEnd: { type: MarkerType.ArrowClosed, width: 18, height: 18 },
+  style: { strokeWidth: 1.75 },
+};
 
 interface DroppedPayload {
   category?: BlockCategory;
@@ -30,6 +39,7 @@ function FlowCanvasInner() {
   const edges = useFlowStore((state) => state.edges);
   const onNodesChange = useFlowStore((state) => state.onNodesChange);
   const onEdgesChange = useFlowStore((state) => state.onEdgesChange);
+  const onConnect = useFlowStore((state) => state.onConnect);
   const addNode = useFlowStore((state) => state.addNode);
   const { screenToFlowPosition } = useReactFlow();
 
@@ -73,12 +83,15 @@ function FlowCanvasInner() {
       nodes={nodes}
       edges={edges}
       nodeTypes={nodeTypes}
+      defaultEdgeOptions={defaultEdgeOptions}
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
+      onConnect={onConnect}
       onDrop={handleDrop}
       onDragOver={handleDragOver}
       fitView
-      deleteKeyCode={null}
+      deleteKeyCode={["Backspace", "Delete"]}
+      multiSelectionKeyCode={["Meta", "Shift"]}
       proOptions={{ hideAttribution: true }}
     >
       <Background
@@ -90,6 +103,18 @@ function FlowCanvasInner() {
       <MiniMap
         pannable
         zoomable
+        nodeColor={(node) => {
+          const category = (node.data as { category?: BlockCategory } | null)
+            ?.category;
+          switch (category) {
+            case "trigger":
+              return "#10b981";
+            case "condition":
+              return "#f59e0b";
+            default:
+              return "#3b82f6";
+          }
+        }}
         className="!bg-muted"
         maskColor="rgb(0 0 0 / 0.05)"
       />
