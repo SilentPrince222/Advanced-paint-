@@ -5,7 +5,6 @@ import {
   Handle,
   NodeToolbar,
   Position,
-  useReactFlow,
   type Node,
   type NodeProps,
 } from "@xyflow/react";
@@ -50,11 +49,13 @@ function BaseNodeComponent({ id, data, selected }: NodeProps<BaseNodeType>) {
   const requiresCredential = variant?.requiresCredential === true;
 
   const removeNode = useFlowStore((state) => state.removeNode);
-  const { setNodes } = useReactFlow();
 
   const handleDelete = () => {
+    // The store is the source of truth (it also drops connected edges).
+    // We're in controlled mode (nodes come from the store prop), so we must
+    // NOT call useReactFlow().setNodes here — the prop overwrites it on the
+    // next render and it would just be dead, flicker-inducing code.
     removeNode(id);
-    setNodes((nodes) => nodes.filter((node) => node.id !== id));
   };
 
   const summary = paramSummary(variant, data.params);
@@ -69,7 +70,6 @@ function BaseNodeComponent({ id, data, selected }: NodeProps<BaseNodeType>) {
       )}
     >
       <NodeToolbar
-        isVisible
         offset={8}
         position={Position.Top}
         className="flex gap-1"

@@ -121,4 +121,62 @@ describe("flow-store", () => {
       expect(nodeIds.has(edges[0].target)).toBe(true);
     });
   });
+
+  describe("toGraphDocument / fromGraphDocument round-trip", () => {
+    it("preserves nodes, params, draft-safety, positions and edge conditions", () => {
+      const doc: GraphDocument = {
+        nodes: [
+          {
+            id: "n1",
+            type: "trigger.schedule",
+            params: { cron: "0 9 * * MON" },
+            isDraftSafe: true,
+          },
+          {
+            id: "n2",
+            type: "action.stripe.charge",
+            params: { amount: 100, currency: "usd" },
+            credentialRef: "demo/stripe-test",
+            isDraftSafe: false,
+          },
+        ],
+        edges: [
+          { id: "e1", fromNodeId: "n1", toNodeId: "n2" },
+        ],
+        views: [
+          { nodeId: "n1", x: 10, y: 20 },
+          { nodeId: "n2", x: 30, y: 40 },
+        ],
+      };
+
+      useFlowStore.getState().fromGraphDocument(doc);
+      const roundTripped = useFlowStore.getState().toGraphDocument();
+
+      // nodes preserved with all logic fields
+      expect(roundTripped.nodes).toEqual(doc.nodes);
+      // views preserved (positions)
+      expect(roundTripped.views).toEqual(doc.views);
+      // edges preserved
+      expect(roundTripped.edges).toEqual(doc.edges);
+    });
+
+    it("preserves a condition label through the round-trip", () => {
+      const doc: GraphDocument = {
+        nodes: [
+          { id: "c", type: "condition.if", params: { expression: "x" }, isDraftSafe: true },
+          { id: "t", type: "action.slack.post", params: {}, isDraftSafe: false },
+        ],
+        edges: [{ id: "e", fromNodeId: "c", toNodeId: "t", condition: "true" }],
+        views: [
+          { nodeId: "c", x: 0, y: 0 },
+          { nodeId: "t", x: 1, y: 1 },
+        ],
+      };
+
+      useFlowStore.getState().fromGraphDocument(doc);
+      const out = useFlowStore.getState().toGraphDocument();
+
+      expect(out.edges).toEqual(doc.edges);
+    });
+  });
 });
