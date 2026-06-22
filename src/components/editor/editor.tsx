@@ -1,13 +1,49 @@
 "use client";
 
-import { Workflow } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Check, Loader2, Save, Workflow } from "lucide-react";
 import { useFlowStore } from "@/lib/flow-store";
+import { Button } from "@/components/ui/button";
+import { fetchFlow, saveFlowToServer, DEMO_FLOW_ID } from "@/lib/flow-client";
 import { NodePalette } from "./node-palette";
 import { FlowCanvas } from "./flow-canvas";
 
 export function Editor() {
   const nodeCount = useFlowStore((state) => state.nodes.length);
   const edgeCount = useFlowStore((state) => state.edges.length);
+  const toDoc = useFlowStore((s) => s.toGraphDocument);
+  const fromDoc = useFlowStore((s) => s.fromGraphDocument);
+
+  const [status, setStatus] = useState<
+    "idle" | "loading" | "saving" | "saved" | "error"
+  >("loading");
+
+  // Load on mount
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      try {
+        const d = await fetchFlow(DEMO_FLOW_ID);
+        if (live && d) fromDoc(d);
+        if (live) setStatus("idle");
+      } catch {
+        if (live) setStatus("error");
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [fromDoc]);
+
+  const onSave = async () => {
+    setStatus("saving");
+    try {
+      await saveFlowToServer(DEMO_FLOW_ID, toDoc());
+      setStatus("saved");
+    } catch {
+      setStatus("error");
+    }
+  };
 
   return (
     <div className="flex h-dvh w-full overflow-hidden bg-background text-foreground">
@@ -21,7 +57,7 @@ export function Editor() {
               Visual Automation Builder
             </h1>
             <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-              Phase 2 · Blocks &amp; Connections
+              Rung 0 · Persist
             </span>
           </div>
 
@@ -35,6 +71,25 @@ export function Editor() {
               <span className="font-medium text-foreground">{edgeCount}</span>{" "}
               connection{edgeCount === 1 ? "" : "s"}
             </span>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onSave}
+              disabled={status === "saving" || status === "loading"}
+            >
+              {status === "saving" ? (
+                <Loader2 className="animate-spin" />
+              ) : status === "saved" ? (
+                <Check />
+              ) : (
+                <Save />
+              )}
+              {status === "saving"
+                ? "Saving…"
+                : status === "saved"
+                  ? "Saved"
+                  : "Save"}
+            </Button>
           </div>
         </header>
 

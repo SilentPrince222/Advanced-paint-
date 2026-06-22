@@ -43,6 +43,10 @@ async function main(): Promise<void> {
       i++;
       continue;
     }
+    if (!inDollar && cleaned[i] === "-" && cleaned[i + 1] === "-") {
+      while (i < cleaned.length && cleaned[i] !== "\n") i++;  // skip inline comment to EOL
+      continue;
+    }
     if (cleaned[i] === ";" && !inDollar) {
       const stmt = current.trim();
       if (stmt) statements.push(stmt);
