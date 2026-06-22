@@ -17,6 +17,13 @@ function connect(sourceId: string, targetId: string) {
   useFlowStore.getState().onConnect(connection);
 }
 
+/**
+ * Store-level behavior tests. Pure (de)serialization logic lives in
+ * `graph-serialize.test.ts`; these cover Zustand-side wiring:
+ *  - onConnect dedupe + self-loop guard
+ *  - addNode / updateNodeData
+ *  - thin delegation of toGraphDocument / fromGraphDocument
+ */
 describe("flow-store", () => {
   beforeEach(reset);
 
@@ -68,62 +75,53 @@ describe("flow-store", () => {
     });
   });
 
-  describe("fromGraphDocument — isDraftSafe default (bug #3)", () => {
-    it("defaults isDraftSafe to true when the loaded node omits it", () => {
-      // Real-world documents (backend JSON, older snapshots, diff fixtures)
-      // may omit isDraftSafe. The loaded node must satisfy LogicNode's
-      // `boolean` contract and SPEC §6.0's default-safe rule.
-      const doc = {
-        nodes: [
-          { id: "n1", type: "trigger.webhook", params: {} },
-          { id: "n2", type: "action.stripe.charge", params: {}, isDraftSafe: false },
-        ],
-        edges: [],
-        views: [
-          { nodeId: "n1", x: 0, y: 0 },
-          { nodeId: "n2", x: 100, y: 100 },
-        ],
-      } as unknown as GraphDocument;
+  describe("addNode", () => {
+    it("seeds params from the variant's field defaults", () => {
+      const { addNode } = useFlowStore.getState();
+      addNode({ type: "action.stripe.charge" });
 
-      useFlowStore.getState().fromGraphDocument(doc);
+      const node = useFlowStore.getState().nodes[0];
+      expect(node.data.params).toEqual({ amount: 100, currency: "usd" });
+    });
 
-      const nodes = useFlowStore.getState().nodes;
-      expect(nodes[0].data.isDraftSafe).toBe(true);
-      expect(nodes[1].data.isDraftSafe).toBe(false);
+    it("marks requiresCredential variants as draft-unsafe by default", () => {
+      const { addNode } = useFlowStore.getState();
+      addNode({ type: "action.stripe.charge" });
+
+      expect(useFlowStore.getState().nodes[0].data.isDraftSafe).toBe(false);
+    });
+
+    it("marks non-credential triggers as draft-safe by default", () => {
+      const { addNode } = useFlowStore.getState();
+      addNode({ type: "trigger.schedule" });
+
+      expect(useFlowStore.getState().nodes[0].data.isDraftSafe).toBe(true);
     });
   });
 
-  describe("fromGraphDocument — orphan edges (bug #4)", () => {
-    it("drops edges that reference nodes not in the document", () => {
-      // A document from the backend / a corrupted snapshot may carry an edge
-      // whose endpoint node was removed. Loading it verbatim produces a
-      // dangling React Flow edge pointing at a non-existent node.
-      const doc = {
-        nodes: [
-          { id: "n1", type: "trigger.webhook", params: {}, isDraftSafe: true },
-        ],
-        edges: [
-          { id: "e1", fromNodeId: "n1", toNodeId: "n1" },
-          { id: "e2", fromNodeId: "n1", toNodeId: "GONE" },
-          { id: "e3", fromNodeId: "ALSO_GONE", toNodeId: "n1" },
-        ],
-        views: [{ nodeId: "n1", x: 0, y: 0 }],
-      } as unknown as GraphDocument;
+  describe("updateNodeData", () => {
+    it("merges a patch into the node's data without touching other nodes", () => {
+      const { addNode, updateNodeData } = useFlowStore.getState();
+      const a = addNode({ type: "action.stripe.charge" });
+      const b = addNode({ type: "action.slack.post" });
 
-      useFlowStore.getState().fromGraphDocument(doc);
+      updateNodeData(a, { params: { amount: 250, currency: "usd" } });
 
-      const { nodes, edges } = useFlowStore.getState();
-      const nodeIds = new Set(nodes.map((n) => n.id));
-      // only e1 (n1 -> n1 endpoints exist) survives; e2/e3 are dropped.
-      expect(edges).toHaveLength(1);
-      expect(edges[0].id).toBe("e1");
-      expect(nodeIds.has(edges[0].source)).toBe(true);
-      expect(nodeIds.has(edges[0].target)).toBe(true);
+      const state = useFlowStore.getState();
+      expect(state.nodes.find((n) => n.id === a)!.data.params).toEqual({
+        amount: 250,
+        currency: "usd",
+      });
+      // b untouched
+      expect(state.nodes.find((n) => n.id === b)!.data.params).toEqual({
+        channel: "#revenue",
+        message: "New charge received.",
+      });
     });
   });
 
-  describe("toGraphDocument / fromGraphDocument round-trip", () => {
-    it("preserves nodes, params, draft-safety, positions and edge conditions", () => {
+  describe("serialization delegation (thin wire)", () => {
+    it("store.toGraphDocument / fromGraphDocument round-trip through graph-serialize", () => {
       const doc: GraphDocument = {
         nodes: [
           {
@@ -136,13 +134,10 @@ describe("flow-store", () => {
             id: "n2",
             type: "action.stripe.charge",
             params: { amount: 100, currency: "usd" },
-            credentialRef: "demo/stripe-test",
             isDraftSafe: false,
           },
         ],
-        edges: [
-          { id: "e1", fromNodeId: "n1", toNodeId: "n2" },
-        ],
+        edges: [{ id: "e1", fromNodeId: "n1", toNodeId: "n2" }],
         views: [
           { nodeId: "n1", x: 10, y: 20 },
           { nodeId: "n2", x: 30, y: 40 },
@@ -150,33 +145,9 @@ describe("flow-store", () => {
       };
 
       useFlowStore.getState().fromGraphDocument(doc);
-      const roundTripped = useFlowStore.getState().toGraphDocument();
-
-      // nodes preserved with all logic fields
-      expect(roundTripped.nodes).toEqual(doc.nodes);
-      // views preserved (positions)
-      expect(roundTripped.views).toEqual(doc.views);
-      // edges preserved
-      expect(roundTripped.edges).toEqual(doc.edges);
-    });
-
-    it("preserves a condition label through the round-trip", () => {
-      const doc: GraphDocument = {
-        nodes: [
-          { id: "c", type: "condition.if", params: { expression: "x" }, isDraftSafe: true },
-          { id: "t", type: "action.slack.post", params: {}, isDraftSafe: false },
-        ],
-        edges: [{ id: "e", fromNodeId: "c", toNodeId: "t", condition: "true" }],
-        views: [
-          { nodeId: "c", x: 0, y: 0 },
-          { nodeId: "t", x: 1, y: 1 },
-        ],
-      };
-
-      useFlowStore.getState().fromGraphDocument(doc);
       const out = useFlowStore.getState().toGraphDocument();
 
-      expect(out.edges).toEqual(doc.edges);
+      expect(out).toEqual(doc);
     });
   });
 });

@@ -14,30 +14,11 @@ import { categoryOf, type LogicNode } from "@/lib/types";
 import {
   CATEGORY_STYLES,
   getVariant,
-  type UiBlockVariant,
 } from "@/lib/block-registry";
 import { useFlowStore } from "@/lib/flow-store";
+import { paramSummary } from "@/lib/node-summary";
 
 type BaseNodeType = Node<LogicNode, "base">;
-
-/**
- * Compact one-line summary of a node's primary param value, e.g.
- * `#revenue`, `100 usd`, `plan == 'pro'`. Driven by the variant's field
- * schema so adding a node type never touches this renderer.
- */
-function paramSummary(variant: UiBlockVariant | null, params: Record<string, unknown>): string {
-  if (!variant || variant.fields.length === 0) return "";
-  const parts: string[] = [];
-  for (const field of variant.fields.slice(0, 2)) {
-    const value = params[field.key];
-    if (value === undefined || value === "") continue;
-    const text = field.type === "select"
-      ? field.options?.find((o) => o.value === String(value))?.label ?? String(value)
-      : String(value);
-    parts.push(text);
-  }
-  return parts.join(" · ");
-}
 
 function BaseNodeComponent({ id, data, selected }: NodeProps<BaseNodeType>) {
   const type = data.type;

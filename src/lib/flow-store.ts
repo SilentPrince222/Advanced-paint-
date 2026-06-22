@@ -17,11 +17,10 @@ import {
   type FlowEdge,
   type FlowNode,
   type GraphDocument,
-  type LogicEdge,
   type LogicNode,
-  type NodeView,
 } from "./types";
-import { getVariant } from "./block-registry";
+import { getVariant, defaultParamsFor } from "./block-registry";
+import { fromGraphDocument, toGraphDocument } from "./graph-serialize";
 
 let nodeSeq = 0;
 
@@ -34,21 +33,6 @@ const randomPosition = () => ({
   x: 120 + Math.random() * 320,
   y: 120 + Math.random() * 240,
 });
-
-/**
- * Build a LogicNode's default `params` from a variant's field schema
- * (SPEC §2.5): each field seeds `params[key]` with its `defaultValue`.
- */
-function defaultParamsFor(type: string): Record<string, unknown> {
-  const variant = getVariant(type);
-  const params: Record<string, unknown> = {};
-  for (const field of variant?.fields ?? []) {
-    if (field.defaultValue !== undefined) {
-      params[field.key] = field.defaultValue;
-    }
-  }
-  return params;
-}
 
 export interface AddNodeOptions {
   /** canonical block type, e.g. `action.stripe.charge` */
@@ -152,76 +136,11 @@ export const useFlowStore = create<FlowState>((set, get) => ({
 
   toGraphDocument: () => {
     const { nodes, edges } = get();
-    const logicNodes: LogicNode[] = nodes.map((node) => {
-      const { id, data } = node;
-      // Strip React Flow's transient metadata: keep only logic-layer fields.
-      const { type, params, credentialRef, isDraftSafe } = data;
-      const logic: LogicNode = {
-        id,
-        type,
-        params: { ...params },
-        isDraftSafe,
-      };
-      if (credentialRef !== undefined) logic.credentialRef = credentialRef;
-      return logic;
-    });
-
-    const logicEdges: LogicEdge[] = edges.map((edge) => {
-      const logic: LogicEdge = {
-        id: edge.id,
-        fromNodeId: edge.source,
-        toNodeId: edge.target,
-      };
-      const condition = edge.data?.condition;
-      if (condition !== undefined) logic.condition = condition;
-      return logic;
-    });
-
-    const views: NodeView[] = nodes.map((node) => {
-      const view: NodeView = {
-        nodeId: node.id,
-        x: node.position.x,
-        y: node.position.y,
-      };
-      // width/height/color are optional — omitted unless set.
-      return view;
-    });
-
-    return { nodes: logicNodes, edges: logicEdges, views };
+    return toGraphDocument(nodes, edges);
   },
 
   fromGraphDocument: (document) => {
-    const viewByNodeId = new Map(document.views.map((v) => [v.nodeId, v]));
-    const nodes: FlowNode[] = document.nodes.map((logic) => {
-      const view = viewByNodeId.get(logic.id);
-      // Coerce missing `isDraftSafe` to the SPEC §6.0 default (true) so a
-      // document loaded from JSON / an older snapshot still satisfies the
-      // LogicNode boolean contract instead of carrying `undefined`.
-      const isDraftSafe = logic.isDraftSafe ?? true;
-      return {
-        id: logic.id,
-        type: "base",
-        position: { x: view?.x ?? 0, y: view?.y ?? 0 },
-        data: { ...logic, isDraftSafe } as LogicNode,
-      };
-    });
-    // Drop orphan edges: a document from the backend or a corrupted snapshot
-    // may carry an edge whose endpoint was removed. Loading it verbatim would
-    // produce a dangling React Flow edge pointing at a non-existent node.
-    const nodeIds = new Set(nodes.map((n) => n.id));
-    const edges: FlowEdge[] = document.edges
-      .filter(
-        (logic) => nodeIds.has(logic.fromNodeId) && nodeIds.has(logic.toNodeId),
-      )
-      .map((logic) => ({
-        id: logic.id,
-        source: logic.fromNodeId,
-        target: logic.toNodeId,
-        type: "smoothstep",
-        animated: true,
-        data: logic.condition !== undefined ? { condition: logic.condition } : {},
-      }));
-    set({ nodes, edges });
+    set(fromGraphDocument(document));
   },
 }));
 

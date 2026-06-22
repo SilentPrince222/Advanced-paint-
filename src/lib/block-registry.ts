@@ -193,3 +193,22 @@ export function getVariantsByCategory(): Record<BlockCategory, UiBlockVariant[]>
   }
   return grouped;
 }
+
+/**
+ * Build a node's default `params` from a variant's field schema (SPEC §2.5):
+ * each field seeds `params[key]` with its `defaultValue`. Fields without a
+ * default are omitted so the SidePanel can tell "unset" from "set to default".
+ *
+ * Lives here (not in the store) because it reads the variant/field schema —
+ * it is block-variant logic, not store logic.
+ */
+export function defaultParamsFor(type: string): Record<string, unknown> {
+  const variant = getVariant(type);
+  const params: Record<string, unknown> = {};
+  for (const field of variant?.fields ?? []) {
+    if (field.defaultValue !== undefined) {
+      params[field.key] = field.defaultValue;
+    }
+  }
+  return params;
+}
