@@ -71,7 +71,7 @@ describe("flow-store", () => {
   describe("fromGraphDocument — isDraftSafe default (bug #3)", () => {
     it("defaults isDraftSafe to true when the loaded node omits it", () => {
       // Real-world documents (backend JSON, older snapshots, diff fixtures)
-      // may omit isDraftSafe. The loaded node must satisfy LogicNode's
+      // may omit isDraftSafe. The loaded node must satisfy GraphNode's
       // `boolean` contract and SPEC §6.0's default-safe rule.
       const doc = {
         nodes: [
@@ -144,8 +144,8 @@ describe("flow-store", () => {
           { id: "e1", fromNodeId: "n1", toNodeId: "n2" },
         ],
         views: [
-          { nodeId: "n1", x: 10, y: 20 },
-          { nodeId: "n2", x: 30, y: 40 },
+          { nodeId: "n1", x: 10, y: 20, width: 160, height: 80 },
+          { nodeId: "n2", x: 30, y: 40, width: 160, height: 80 },
         ],
       };
 
@@ -168,8 +168,8 @@ describe("flow-store", () => {
         ],
         edges: [{ id: "e", fromNodeId: "c", toNodeId: "t", condition: "true" }],
         views: [
-          { nodeId: "c", x: 0, y: 0 },
-          { nodeId: "t", x: 1, y: 1 },
+          { nodeId: "c", x: 0, y: 0, width: 160, height: 80 },
+          { nodeId: "t", x: 1, y: 1, width: 160, height: 80 },
         ],
       };
 

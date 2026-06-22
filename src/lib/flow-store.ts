@@ -14,11 +14,13 @@ import {
 } from "@xyflow/react";
 import {
   categoryOf,
+  type BaseNodeData,
   type FlowEdge,
   type FlowNode,
   type GraphDocument,
-  type LogicEdge,
-  type LogicNode,
+  type GraphEdge,
+  type GraphNode,
+  type NodeType,
   type NodeView,
 } from "./types";
 import { getVariant } from "./block-registry";
@@ -36,7 +38,7 @@ const randomPosition = () => ({
 });
 
 /**
- * Build a LogicNode's default `params` from a variant's field schema
+ * Build a GraphNode's default `params` from a variant's field schema
  * (SPEC §2.5): each field seeds `params[key]` with its `defaultValue`.
  */
 function defaultParamsFor(type: string): Record<string, unknown> {
@@ -52,7 +54,7 @@ function defaultParamsFor(type: string): Record<string, unknown> {
 
 export interface AddNodeOptions {
   /** canonical block type, e.g. `action.stripe.charge` */
-  type: string;
+  type: NodeType;
   position?: { x: number; y: number };
 }
 
@@ -68,7 +70,7 @@ export interface FlowState {
   setNodes: (nodes: FlowNode[]) => void;
   setEdges: (edges: FlowEdge[]) => void;
   /** update a logic field on a node (params / credentialRef / isDraftSafe) */
-  updateNodeData: (id: string, patch: Partial<LogicNode>) => void;
+  updateNodeData: (id: string, patch: Partial<GraphNode>) => void;
   /** serialize the canvas to the two-layer Data Contract (SPEC §2.1) */
   toGraphDocument: () => GraphDocument;
   /** load a GraphDocument back onto the canvas */
@@ -106,7 +108,9 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     // are NOT draft-safe; everything else is.
     const isDraftSafe = variant?.requiresCredential !== true;
 
-    const logic: LogicNode = {
+    // pin 3a: intermediate must be BaseNodeData (not GraphNode) so data: logic
+    // assigns to FlowNode which requires Node<BaseNodeData>.
+    const logic: BaseNodeData = {
       id,
       type,
       params: defaultParamsFor(type),
@@ -144,7 +148,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     set({
       nodes: get().nodes.map((node) =>
         node.id === id
-          ? { ...node, data: { ...node.data, ...patch } as LogicNode }
+          ? { ...node, data: { ...node.data, ...patch } as BaseNodeData }
           : node,
       ),
     });
@@ -152,11 +156,11 @@ export const useFlowStore = create<FlowState>((set, get) => ({
 
   toGraphDocument: () => {
     const { nodes, edges } = get();
-    const logicNodes: LogicNode[] = nodes.map((node) => {
+    const logicNodes: GraphNode[] = nodes.map((node) => {
       const { id, data } = node;
       // Strip React Flow's transient metadata: keep only logic-layer fields.
       const { type, params, credentialRef, isDraftSafe } = data;
-      const logic: LogicNode = {
+      const logic: GraphNode = {
         id,
         type,
         params: { ...params },
@@ -166,8 +170,8 @@ export const useFlowStore = create<FlowState>((set, get) => ({
       return logic;
     });
 
-    const logicEdges: LogicEdge[] = edges.map((edge) => {
-      const logic: LogicEdge = {
+    const logicEdges: GraphEdge[] = edges.map((edge) => {
+      const logic: GraphEdge = {
         id: edge.id,
         fromNodeId: edge.source,
         toNodeId: edge.target,
@@ -177,15 +181,15 @@ export const useFlowStore = create<FlowState>((set, get) => ({
       return logic;
     });
 
-    const views: NodeView[] = nodes.map((node) => {
-      const view: NodeView = {
-        nodeId: node.id,
-        x: node.position.x,
-        y: node.position.y,
-      };
-      // width/height/color are optional — omitted unless set.
-      return view;
-    });
+    // pin 3c: emit required width/height from RF node geometry (default 160×80
+    // per SPEC DDL §3 defaults). color is not tracked yet — omit it.
+    const views: NodeView[] = nodes.map((node) => ({
+      nodeId: node.id,
+      x: node.position.x,
+      y: node.position.y,
+      width: node.width ?? 160,
+      height: node.height ?? 80,
+    }));
 
     return { nodes: logicNodes, edges: logicEdges, views };
   },
@@ -196,13 +200,18 @@ export const useFlowStore = create<FlowState>((set, get) => ({
       const view = viewByNodeId.get(logic.id);
       // Coerce missing `isDraftSafe` to the SPEC §6.0 default (true) so a
       // document loaded from JSON / an older snapshot still satisfies the
-      // LogicNode boolean contract instead of carrying `undefined`.
+      // GraphNode boolean contract instead of carrying `undefined`.
       const isDraftSafe = logic.isDraftSafe ?? true;
+      // pin 3b: cast to BaseNodeData (has index sig) so the RF Node accepts it.
       return {
         id: logic.id,
         type: "base",
         position: { x: view?.x ?? 0, y: view?.y ?? 0 },
-        data: { ...logic, isDraftSafe } as LogicNode,
+        // pin 3b: also propagate width/height from the view so the round-trip
+        // restores geometry (default 160×80 per SPEC DDL §3).
+        width: view?.width ?? 160,
+        height: view?.height ?? 80,
+        data: { ...logic, isDraftSafe } as BaseNodeData,
       };
     });
     // Drop orphan edges: a document from the backend or a corrupted snapshot

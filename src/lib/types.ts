@@ -1,20 +1,18 @@
 import type { Edge, Node } from "@xyflow/react";
+import type { GraphNode, NodeType } from "./contract";
 
 /**
- * Shared schema for the automation builder — the Data Contract (SPEC §2).
+ * Runtime types for the React Flow canvas layer.
  *
- * Two layers, linked by stable node id:
- *   - LOGIC layer  (what runs):     LogicNode / LogicEdge
- *   - PRESENTATION layer (where):   NodeView
- *
- * The split is deliberate (SPEC §2.1): moving a block (view change) and
- * changing its logic are independent classes of change. The diff engine
- * (Phase 5) operates on the LOGIC layer only — position changes are NEVER
- * flagged as a meaningful diff.
- *
- * Keep all graph shapes here so Phase 3–5 (SidePanel, history, diff) and the
- * backend contract share one source of truth.
+ * The pure Data Contract (SPEC §2.1–2.5) lives in `lib/contract.ts`.
+ * This file re-exports the contract and adds React-Flow-specific runtime
+ * wrappers — the index signature that @xyflow/react's Node<T> generic
+ * requires lives here, NOT in the contract.
  */
+
+// Re-export the full contract so existing imports of GraphNode, GraphEdge, etc.
+// from "lib/types" continue to work unchanged.
+export * from "./contract";
 
 // ─── Block categories ──────────────────────────────────────────────────────
 
@@ -51,7 +49,7 @@ export interface BlockFieldSchema {
 /** Serializable block-variant definition (no UI concerns). */
 export interface BlockVariant {
   /** canonical type, e.g. `action.stripe.charge` */
-  type: string;
+  type: NodeType;
   category: BlockCategory;
   label: string;
   description?: string;
@@ -61,67 +59,22 @@ export interface BlockVariant {
   requiresCredential?: boolean;
 }
 
-// ─── LOGIC layer (SPEC §2.1) — the Data Contract with the backend ──────────
-
-export interface LogicNode {
-  id: string;
-  /** canonical block type, e.g. `trigger.webhook` / `action.stripe.charge` */
-  type: string;
-  /** per-type config; secrets NEVER live here (use `credentialRef`) */
-  params: Record<string, unknown>;
-  /** opaque vault id; the spec mandates this exists from day one */
-  credentialRef?: string;
-  /** may this node execute in a draft/branch context? default true */
-  isDraftSafe: boolean;
-  // React Flow helpers attach transient metadata; allow it without TS errors.
-  readonly [key: string]: unknown;
-}
-
-export interface LogicEdge {
-  id: string;
-  fromNodeId: string;
-  toNodeId: string;
-  /** label for condition branches, e.g. "true" / "false" */
-  condition?: string;
-  readonly [key: string]: unknown;
-}
-
-// ─── PRESENTATION layer (SPEC §2.1) ─────────────────────────────────────────
-
-export interface NodeView {
-  nodeId: string;
-  x: number;
-  y: number;
-  width?: number;
-  height?: number;
-  color?: string;
-}
-
-// ─── The full graph document (what gets saved / snapshotted / diffed) ───────
-
-export interface GraphDocument {
-  nodes: LogicNode[];
-  edges: LogicEdge[];
-  views: NodeView[];
-}
-
 // ─── React Flow runtime types (canvas-side) ────────────────────────────────
 
-/** The data React Flow carries per node — IS the logic layer. */
-export type FlowNode = Node<LogicNode, "base">;
+/**
+ * Runtime node-data type: extends the pure contract GraphNode with an index
+ * signature so @xyflow/react's Node<NodeData extends Record<string,unknown>>
+ * constraint is satisfied. The index signature lives here, NOT in contract.ts.
+ */
+export interface BaseNodeData extends GraphNode {
+  readonly [key: string]: unknown;
+}
+
+/** The React Flow node type used by the canvas. */
+export type FlowNode = Node<BaseNodeData, "base">;
 
 export interface FlowEdgeData {
   condition?: string;
   readonly [key: string]: unknown;
 }
 export type FlowEdge = Edge<FlowEdgeData>;
-
-// ─── Version snapshot (Phase 4) ─────────────────────────────────────────────
-
-export interface CanvasSnapshot {
-  /** monotonically increasing within the session */
-  seq: number;
-  createdAt: string;
-  note?: string;
-  document: GraphDocument;
-}
