@@ -14,10 +14,12 @@ import {
 } from "@xyflow/react";
 import {
   categoryOf,
+  type BaseNodeData,
   type FlowEdge,
   type FlowNode,
   type GraphDocument,
-  type LogicNode,
+  type GraphNode,
+  type NodeType,
 } from "./types";
 import { getVariant, defaultParamsFor } from "./block-registry";
 import { fromGraphDocument, toGraphDocument } from "./graph-serialize";
@@ -36,7 +38,7 @@ const randomPosition = () => ({
 
 export interface AddNodeOptions {
   /** canonical block type, e.g. `action.stripe.charge` */
-  type: string;
+  type: NodeType;
   position?: { x: number; y: number };
 }
 
@@ -52,7 +54,7 @@ export interface FlowState {
   setNodes: (nodes: FlowNode[]) => void;
   setEdges: (edges: FlowEdge[]) => void;
   /** update a logic field on a node (params / credentialRef / isDraftSafe) */
-  updateNodeData: (id: string, patch: Partial<LogicNode>) => void;
+  updateNodeData: (id: string, patch: Partial<GraphNode>) => void;
   /** serialize the canvas to the two-layer Data Contract (SPEC §2.1) */
   toGraphDocument: () => GraphDocument;
   /** load a GraphDocument back onto the canvas */
@@ -90,7 +92,9 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     // are NOT draft-safe; everything else is.
     const isDraftSafe = variant?.requiresCredential !== true;
 
-    const logic: LogicNode = {
+    // pin 3a: intermediate must be BaseNodeData (not GraphNode) so data: logic
+    // assigns to FlowNode which requires Node<BaseNodeData>.
+    const logic: BaseNodeData = {
       id,
       type,
       params: defaultParamsFor(type),
@@ -128,16 +132,13 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     set({
       nodes: get().nodes.map((node) =>
         node.id === id
-          ? { ...node, data: { ...node.data, ...patch } as LogicNode }
+          ? { ...node, data: { ...node.data, ...patch } as BaseNodeData }
           : node,
       ),
     });
   },
 
-  toGraphDocument: () => {
-    const { nodes, edges } = get();
-    return toGraphDocument(nodes, edges);
-  },
+  toGraphDocument: () => toGraphDocument(get().nodes, get().edges),
 
   fromGraphDocument: (document) => {
     set(fromGraphDocument(document));

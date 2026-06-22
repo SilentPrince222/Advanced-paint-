@@ -139,8 +139,8 @@ describe("flow-store", () => {
         ],
         edges: [{ id: "e1", fromNodeId: "n1", toNodeId: "n2" }],
         views: [
-          { nodeId: "n1", x: 10, y: 20 },
-          { nodeId: "n2", x: 30, y: 40 },
+          { nodeId: "n1", x: 10, y: 20, width: 160, height: 80 },
+          { nodeId: "n2", x: 30, y: 40, width: 160, height: 80 },
         ],
       };
 

@@ -16,7 +16,7 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import { useFlowStore } from "@/lib/flow-store";
-import { categoryOf } from "@/lib/types";
+import { categoryOf, isNodeType } from "@/lib/types";
 import { parseDropPayload } from "@/lib/drop-payload";
 import { BaseNode } from "./base-node";
 
@@ -55,6 +55,7 @@ function FlowCanvasInner() {
       // crash the node renderer in categoryOf().
       const payload = parseDropPayload(raw);
       if (!payload) return;
+      if (!isNodeType(payload.type)) return;
 
       const position = screenToFlowPosition({
         x: event.clientX,

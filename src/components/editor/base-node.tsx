@@ -10,7 +10,7 @@ import {
 } from "@xyflow/react";
 import { Lock, Trash2, Workflow } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { categoryOf, type LogicNode } from "@/lib/types";
+import { categoryOf, type BaseNodeData } from "@/lib/types";
 import {
   CATEGORY_STYLES,
   getVariant,
@@ -18,7 +18,7 @@ import {
 import { useFlowStore } from "@/lib/flow-store";
 import { paramSummary } from "@/lib/node-summary";
 
-type BaseNodeType = Node<LogicNode, "base">;
+type BaseNodeType = Node<BaseNodeData, "base">;
 
 function BaseNodeComponent({ id, data, selected }: NodeProps<BaseNodeType>) {
   const type = data.type;

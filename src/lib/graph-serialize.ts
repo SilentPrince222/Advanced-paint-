@@ -1,9 +1,10 @@
 import type {
+  BaseNodeData,
   FlowEdge,
   FlowNode,
   GraphDocument,
-  LogicEdge,
-  LogicNode,
+  GraphEdge,
+  GraphNode,
   NodeView,
 } from "./types";
 
@@ -23,10 +24,10 @@ export function toGraphDocument(
   nodes: FlowNode[],
   edges: FlowEdge[],
 ): GraphDocument {
-  const logicNodes: LogicNode[] = nodes.map((node) => {
+  const logicNodes: GraphNode[] = nodes.map((node) => {
     const { id, data } = node;
     const { type, params, credentialRef, isDraftSafe } = data;
-    const logic: LogicNode = {
+    const logic: GraphNode = {
       id,
       type,
       params: { ...params },
@@ -36,8 +37,8 @@ export function toGraphDocument(
     return logic;
   });
 
-  const logicEdges: LogicEdge[] = edges.map((edge) => {
-    const logic: LogicEdge = {
+  const logicEdges: GraphEdge[] = edges.map((edge) => {
+    const logic: GraphEdge = {
       id: edge.id,
       fromNodeId: edge.source,
       toNodeId: edge.target,
@@ -47,11 +48,14 @@ export function toGraphDocument(
     return logic;
   });
 
+  // Emit required width/height from RF node geometry (default 160×80 per SPEC
+  // DDL §3). color is not tracked yet — omit it.
   const views: NodeView[] = nodes.map((node) => ({
     nodeId: node.id,
     x: node.position.x,
     y: node.position.y,
-    // width/height/color optional — omitted unless set
+    width: node.width ?? 160,
+    height: node.height ?? 80,
   }));
 
   return { nodes: logicNodes, edges: logicEdges, views };
@@ -77,7 +81,11 @@ export function fromGraphDocument(document: GraphDocument): {
       id: logic.id,
       type: "base",
       position: { x: view?.x ?? 0, y: view?.y ?? 0 },
-      data: { ...logic, isDraftSafe } as LogicNode,
+      // Propagate width/height from the view so the round-trip restores
+      // geometry (default 160×80 per SPEC DDL §3).
+      width: view?.width ?? 160,
+      height: view?.height ?? 80,
+      data: { ...logic, isDraftSafe } as BaseNodeData,
     };
   });
 

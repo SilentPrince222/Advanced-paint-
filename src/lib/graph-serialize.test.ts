@@ -2,32 +2,6 @@ import { describe, expect, it } from "vitest";
 import { toGraphDocument, fromGraphDocument } from "./graph-serialize";
 import type { GraphDocument } from "./types";
 
-function buildCanvasWithScheduleAndStripe() {
-  const doc: GraphDocument = {
-    nodes: [
-      {
-        id: "n1",
-        type: "trigger.schedule",
-        params: { cron: "0 9 * * MON" },
-        isDraftSafe: true,
-      },
-      {
-        id: "n2",
-        type: "action.stripe.charge",
-        params: { amount: 100, currency: "usd" },
-        credentialRef: "demo/stripe-test",
-        isDraftSafe: false,
-      },
-    ],
-    edges: [{ id: "e1", fromNodeId: "n1", toNodeId: "n2" }],
-    views: [
-      { nodeId: "n1", x: 10, y: 20 },
-      { nodeId: "n2", x: 30, y: 40 },
-    ],
-  };
-  return fromGraphDocument(doc);
-}
-
 describe("graph-serialize — round-trip", () => {
   it("preserves nodes, params, credentialRef, draft-safety, positions, edges", () => {
     const doc: GraphDocument = {
@@ -48,8 +22,8 @@ describe("graph-serialize — round-trip", () => {
       ],
       edges: [{ id: "e1", fromNodeId: "n1", toNodeId: "n2" }],
       views: [
-        { nodeId: "n1", x: 10, y: 20 },
-        { nodeId: "n2", x: 30, y: 40 },
+        { nodeId: "n1", x: 10, y: 20, width: 160, height: 80 },
+        { nodeId: "n2", x: 30, y: 40, width: 200, height: 100 },
       ],
     };
 
@@ -69,8 +43,8 @@ describe("graph-serialize — round-trip", () => {
       ],
       edges: [{ id: "e", fromNodeId: "c", toNodeId: "t", condition: "true" }],
       views: [
-        { nodeId: "c", x: 0, y: 0 },
-        { nodeId: "t", x: 1, y: 1 },
+        { nodeId: "c", x: 0, y: 0, width: 160, height: 80 },
+        { nodeId: "t", x: 1, y: 1, width: 160, height: 80 },
       ],
     };
 
@@ -86,7 +60,7 @@ describe("graph-serialize — fromGraphDocument defensive normalization", () => 
     const doc = {
       nodes: [{ id: "n1", type: "trigger.webhook", params: {} }],
       edges: [],
-      views: [{ nodeId: "n1", x: 0, y: 0 }],
+      views: [{ nodeId: "n1", x: 0, y: 0, width: 160, height: 80 }],
     } as unknown as GraphDocument;
 
     const { nodes } = fromGraphDocument(doc);
@@ -100,7 +74,7 @@ describe("graph-serialize — fromGraphDocument defensive normalization", () => 
         { id: "n1", type: "action.stripe.charge", params: {}, isDraftSafe: false },
       ],
       edges: [],
-      views: [{ nodeId: "n1", x: 0, y: 0 }],
+      views: [{ nodeId: "n1", x: 0, y: 0, width: 160, height: 80 }],
     } as unknown as GraphDocument;
 
     const { nodes } = fromGraphDocument(doc);
@@ -118,7 +92,7 @@ describe("graph-serialize — fromGraphDocument defensive normalization", () => 
         { id: "e2", fromNodeId: "n1", toNodeId: "GONE" },
         { id: "e3", fromNodeId: "ALSO_GONE", toNodeId: "n1" },
       ],
-      views: [{ nodeId: "n1", x: 0, y: 0 }],
+      views: [{ nodeId: "n1", x: 0, y: 0, width: 160, height: 80 }],
     } as unknown as GraphDocument;
 
     const { nodes, edges } = fromGraphDocument(doc);
@@ -131,7 +105,6 @@ describe("graph-serialize — fromGraphDocument defensive normalization", () => 
   });
 
   it("positions a node at (0,0) when its view is missing", () => {
-    const { nodes } = buildCanvasWithScheduleAndStripe();
     const docNoViews: GraphDocument = {
       nodes: [
         { id: "x", type: "trigger.webhook", params: {}, isDraftSafe: true },
@@ -141,7 +114,21 @@ describe("graph-serialize — fromGraphDocument defensive normalization", () => 
     };
     const loaded = fromGraphDocument(docNoViews);
     expect(loaded.nodes[0].position).toEqual({ x: 0, y: 0 });
-    // keep nodes referenced so TS doesn't flag it
-    expect(nodes).toHaveLength(2);
+  });
+
+  it("applies default 160×80 geometry when the view omits width/height", () => {
+    // NodeView.width/height are required in the contract, but a legacy doc
+    // may slip through without them — fromGraphDocument must still produce a
+    // valid RF node with sensible defaults.
+    const doc = {
+      nodes: [{ id: "n1", type: "trigger.webhook", params: {}, isDraftSafe: true }],
+      edges: [],
+      views: [{ nodeId: "n1", x: 5, y: 5 }],
+    } as unknown as GraphDocument;
+
+    const { nodes } = fromGraphDocument(doc);
+
+    expect(nodes[0].width).toBe(160);
+    expect(nodes[0].height).toBe(80);
   });
 });
