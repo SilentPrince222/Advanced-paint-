@@ -9,9 +9,9 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "db:init": "psql \"$DATABASE_URL\" -f db/schema.sql",
-    "verify:db": "tsx scripts/verify-db.ts",
-    "verify:stripe": "tsx scripts/verify-stripe.ts"
+    "db:init": "tsx --env-file=.env scripts/init-db.ts",
+    "verify:db": "tsx --env-file=.env scripts/verify-db.ts",
+    "verify:stripe": "tsx --env-file=.env scripts/verify-stripe.ts"
   },
   "dependencies": {
     "@xyflow/react": "^12.11.0",
