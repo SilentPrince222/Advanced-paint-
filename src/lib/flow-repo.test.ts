@@ -1,6 +1,6 @@
 import { describe, it, expect, afterAll } from "vitest";
 import { Pool } from "pg";
-import { saveFlow, loadFlow, commitFlow, listCommits, rollbackToCommit } from "./flow-repo";
+import { saveFlow, loadFlow, commitFlow, listCommits, rollbackToCommit, loadCommitSnapshot } from "./flow-repo";
 import type { GraphDocument } from "@/lib/contract";
 import { randomUUID } from "node:crypto";
 
@@ -145,5 +145,37 @@ describe.skipIf(!process.env.DATABASE_URL)("commit history + rollback", () => {
     expect(r.ok).toBe(false);
     if (r.ok) throw new Error("unreachable");
     expect(r.reason).toBe("no-branch");
+  });
+});
+
+describe.skipIf(!process.env.DATABASE_URL)("loadCommitSnapshot", () => {
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  const flowId = `test-rung3a-snapshot-${Date.now()}`;
+
+  afterAll(() => pool.end());
+
+  it("returns the committed GraphDocument for a valid commitId", async () => {
+    await saveFlow(pool, flowId, docA);
+    const cId = randomUUID();
+    const r = await commitFlow(pool, flowId, cId, "snap test");
+    expect(r.ok).toBe(true);
+
+    const snap = await loadCommitSnapshot(pool, flowId, cId);
+    expect(snap).toEqual(docA);
+  });
+
+  it("returns null for a bogus commitId", async () => {
+    const snap = await loadCommitSnapshot(pool, flowId, "bogus-id");
+    expect(snap).toBeNull();
+  });
+
+  it("returns null for a valid commitId belonging to a different flow (cross-flow guard)", async () => {
+    // Commit in flowId, then try to read it via a different flowId
+    await saveFlow(pool, flowId, docA);
+    const cId = randomUUID();
+    await commitFlow(pool, flowId, cId, "other");
+
+    const snap = await loadCommitSnapshot(pool, "other-flow-rung3a", cId);
+    expect(snap).toBeNull();
   });
 });

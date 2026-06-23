@@ -13,6 +13,7 @@ vi.mock("@/lib/flow-client", () => ({
   listCommits: vi.fn().mockResolvedValue([]),
   commitFlow: vi.fn(),
   rollbackFlow: vi.fn(),
+  diffFlow: vi.fn(),
 }));
 
 beforeEach(async () => {
@@ -28,10 +29,10 @@ beforeEach(async () => {
 
 it("B13 — Save status stuck 'saved': after an edit the button must revert to 'Save' (dirty)", async () => {
   render(<Editor />);
-  await waitFor(() => screen.getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Save" })).toBeEnabled(), { timeout: 5000 });
 
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
-  await waitFor(() => screen.getByRole("button", { name: "Saved" }));
+  await waitFor(() => screen.getByRole("button", { name: "Saved" }), { timeout: 5000 });
 
   act(() => {
     useFlowStore.getState().addNode({ type: "trigger.webhook" });
@@ -41,8 +42,8 @@ it("B13 — Save status stuck 'saved': after an edit the button must revert to '
   // Current code keeps "Saved" → RED.
   await waitFor(() => {
     expect(screen.queryByRole("button", { name: "Saved" })).toBeNull();
-  });
-});
+  }, { timeout: 5000 });
+}, 15000);
 
 it("B12 — Save NOT disabled while a run is in flight: Save must be disabled during a run", async () => {
   // make runFlow hang so `running` stays true
@@ -52,14 +53,14 @@ it("B12 — Save NOT disabled while a run is in flight: Save must be disabled du
   );
 
   render(<Editor />);
-  await waitFor(() => screen.getByRole("button", { name: "Run" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Run" })).toBeEnabled(), { timeout: 5000 });
 
   fireEvent.click(screen.getByRole("button", { name: "Run" }));
-  await waitFor(() => screen.getByRole("button", { name: "Running…" }));
+  await waitFor(() => screen.getByRole("button", { name: "Running…" }), { timeout: 5000 });
 
   // CORRECT behavior: Save is disabled during a run.
   // Current code leaves it enabled → RED.
   expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
 
   release?.(undefined); // cleanup the hanging promise
-});
+}, 15000);

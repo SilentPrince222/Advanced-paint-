@@ -472,3 +472,21 @@ export async function rollbackToCommit(
     c.release();
   }
 }
+
+/**
+ * Load a single commit's graph_snapshot for a given flow.
+ * Returns null if the commit doesn't exist or belongs to a different flow_id.
+ * Flow-scoped (AND flow_id=$2) to reject cross-flow commit ids — matches rollbackToCommit pattern.
+ */
+export async function loadCommitSnapshot(
+  pool: Pool,
+  flowId: string,
+  commitId: string,
+): Promise<GraphDocument | null> {
+  const res = await pool.query(
+    `SELECT graph_snapshot FROM "commit" WHERE id = $1 AND flow_id = $2`,
+    [commitId, flowId],
+  );
+  if (res.rowCount === 0) return null;
+  return res.rows[0].graph_snapshot as GraphDocument;
+}

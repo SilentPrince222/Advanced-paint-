@@ -11,12 +11,14 @@ import {
   DEMO_FLOW_ID,
 } from "@/lib/flow-client";
 import type { CommitMeta } from "@/lib/contract";
+import { DiffView } from "@/components/editor/diff-view";
 
 export function VersionPanel() {
   const [commits, setCommits] = useState<CommitMeta[]>([]);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [diffFor, setDiffFor] = useState<CommitMeta | null>(null);
 
   const refresh = async () => {
     try {
@@ -112,9 +114,32 @@ export function VersionPanel() {
             >
               Rollback
             </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={c.parentId == null || busy}
+              onClick={() => {
+                if (c.parentId) setDiffFor(c);
+              }}
+            >
+              Diff
+            </Button>
           </div>
         ))}
       </div>
+
+      {diffFor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg">
+            <DiffView
+              flowId={DEMO_FLOW_ID}
+              from={diffFor.parentId!}
+              to={diffFor.id}
+              onClose={() => setDiffFor(null)}
+            />
+          </div>
+        </div>
+      )}
     </aside>
   );
 }

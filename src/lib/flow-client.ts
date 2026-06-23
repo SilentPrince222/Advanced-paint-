@@ -1,4 +1,4 @@
-import type { CommitMeta, ExecLogEntry, GraphDocument } from "@/lib/contract";
+import type { CommitMeta, ExecLogEntry, GraphDocument, GraphDiff } from "@/lib/contract";
 
 export const DEMO_FLOW_ID = "demo";
 
@@ -85,6 +85,25 @@ export async function rollbackFlow(
     throw new Error(`rollbackFlow failed: ${res.status} ${text}`);
   }
   return res.json() as Promise<{ commit: CommitMeta; doc: GraphDocument }>;
+}
+
+/**
+ * Fetch the field-level diff between two commits of a flow.
+ * Throws on any non-OK response (surfaces the server error text).
+ */
+export async function diffFlow(
+  id: string,
+  from: string,
+  to: string,
+): Promise<GraphDiff> {
+  const res = await fetch(
+    `/api/flows/${encodeURIComponent(id)}/diff?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+  );
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText);
+    throw new Error(`diffFlow failed: ${res.status} ${text}`);
+  }
+  return res.json() as Promise<GraphDiff>;
 }
 
 export interface RunResult {
