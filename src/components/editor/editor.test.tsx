@@ -10,6 +10,9 @@ vi.mock("@/lib/flow-client", () => ({
   fetchFlow: vi.fn().mockResolvedValue(null),
   saveFlowToServer: vi.fn().mockResolvedValue(undefined),
   runFlow: vi.fn(),
+  listCommits: vi.fn().mockResolvedValue([]),
+  commitFlow: vi.fn(),
+  rollbackFlow: vi.fn(),
 }));
 
 beforeEach(async () => {
@@ -20,6 +23,7 @@ beforeEach(async () => {
   // Re-apply default mock implementations after clearAllMocks
   (client.fetchFlow as ReturnType<typeof vi.fn>).mockResolvedValue(null);
   (client.saveFlowToServer as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+  (client.listCommits as ReturnType<typeof vi.fn>).mockResolvedValue([]);
 });
 
 it("B13 — Save status stuck 'saved': after an edit the button must revert to 'Save' (dirty)", async () => {

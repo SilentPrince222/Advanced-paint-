@@ -13,6 +13,7 @@ import {
 } from "@/lib/flow-client";
 import { NodePalette } from "./node-palette";
 import { FlowCanvas } from "./flow-canvas";
+import { VersionPanel } from "./version-panel";
 
 export function Editor() {
   const nodeCount = useFlowStore((state) => state.nodes.length);
@@ -204,6 +205,8 @@ export function Editor() {
           )}
         </div>
       </div>
+
+      <VersionPanel />
     </div>
   );
 }

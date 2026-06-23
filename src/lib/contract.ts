@@ -52,6 +52,13 @@ export interface GraphDocument {
 
 // ── §2.2 Version envelope ─────────────────────────────────────────────────
 
+export interface CommitMeta {
+  id: string;
+  parentId: string | null;
+  authorNote: string;
+  createdAt: string; // ISO
+}
+
 export interface Commit {
   id: string;                       // server-generated nanoid — NOT a content hash, so re-rolling
                                     //   back to an identical state is always a fresh commit (no PK clash).
