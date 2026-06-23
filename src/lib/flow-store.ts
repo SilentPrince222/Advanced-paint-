@@ -55,6 +55,10 @@ export interface FlowState {
   setEdges: (edges: FlowEdge[]) => void;
   /** update a logic field on a node (params / credentialRef / isDraftSafe) */
   updateNodeData: (id: string, patch: Partial<GraphNode>) => void;
+  /** merge one key into a node's params */
+  updateNodeParam: (id: string, key: string, value: unknown) => void;
+  /** set or clear a node's credentialRef */
+  setCredentialRef: (id: string, credentialRef: string | undefined) => void;
   /** serialize the canvas to the two-layer Data Contract (SPEC §2.1) */
   toGraphDocument: () => GraphDocument;
   /** load a GraphDocument back onto the canvas */
@@ -142,6 +146,18 @@ export const useFlowStore = create<FlowState>((set, get) => ({
           : node,
       ),
     });
+  },
+
+  updateNodeParam: (id, key, value) => {
+    const node = get().nodes.find((n) => n.id === id);
+    if (!node) return;
+    get().updateNodeData(id, {
+      params: { ...node.data.params, [key]: value },
+    });
+  },
+
+  setCredentialRef: (id, credentialRef) => {
+    get().updateNodeData(id, { credentialRef });
   },
 
   toGraphDocument: () => toGraphDocument(get().nodes, get().edges),

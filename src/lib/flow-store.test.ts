@@ -120,6 +120,33 @@ describe("flow-store", () => {
     });
   });
 
+  describe("updateNodeParam", () => {
+    it("merges one param key without replacing the whole params object", () => {
+      const { addNode, updateNodeParam } = useFlowStore.getState();
+      const id = addNode({ type: "action.stripe.charge" });
+
+      updateNodeParam(id, "amount", 250);
+
+      expect(useFlowStore.getState().nodes[0]!.data.params).toEqual({
+        amount: 250,
+        currency: "usd",
+      });
+    });
+  });
+
+  describe("setCredentialRef", () => {
+    it("sets credentialRef on the node", () => {
+      const { addNode, setCredentialRef } = useFlowStore.getState();
+      const id = addNode({ type: "action.stripe.charge" });
+
+      setCredentialRef(id, "demo/stripe-test");
+
+      expect(useFlowStore.getState().nodes[0]!.data.credentialRef).toBe(
+        "demo/stripe-test",
+      );
+    });
+  });
+
   describe("serialization delegation (thin wire)", () => {
     it("store.toGraphDocument / fromGraphDocument round-trip through graph-serialize", () => {
       const doc: GraphDocument = {

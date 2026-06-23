@@ -5,6 +5,9 @@ import * as client from "@/lib/flow-client";
 import { useFlowStore } from "@/lib/flow-store";
 
 vi.mock("./flow-canvas", () => ({ FlowCanvas: () => null }));
+vi.mock("./side-panel", () => ({
+  SidePanel: () => <div data-testid="side-panel-stub" />,
+}));
 vi.mock("@/lib/flow-client", () => ({
   DEMO_FLOW_ID: "demo",
   fetchFlow: vi.fn().mockResolvedValue(null),
@@ -67,3 +70,11 @@ it("B12 — Save NOT disabled while a run is in flight: Save must be disabled du
 
   release?.(undefined); // cleanup the hanging promise
 }, 15000);
+
+it("renders side-panel stub (wiring)", async () => {
+  render(<Editor />);
+  await waitFor(
+    () => expect(screen.getByTestId("side-panel-stub")).toBeInTheDocument(),
+    { timeout: 5000 },
+  );
+});

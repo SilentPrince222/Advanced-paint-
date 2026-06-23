@@ -44,6 +44,7 @@ echo "==> Building Next.js app..."
 npm run build
 
 echo "==> Starting Next.js server on port ${PORT}..."
+export MOCK_MODE=1
 npx next start -p "${PORT}" &
 SERVER_PID=$!
 

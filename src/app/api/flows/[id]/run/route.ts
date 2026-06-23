@@ -31,12 +31,22 @@ export async function POST(
       return Response.json({ commitId: null, entries: [] });
     }
 
+    const mockMode =
+      process.env.MOCK_MODE === "1" || process.env.MOCK_MODE === "true";
+
     const commitId = randomUUID();
     const now = new Date().toISOString();
     const records: RunActionRecord[] = [];
     const entries: ExecLogEntry[] = [];
 
     for (const s of actions) {
+      if (!mockMode) {
+        return Response.json(
+          { error: "Lambda not wired — set MOCK_MODE=1 for demo" },
+          { status: 501 },
+        );
+      }
+
       const execId = randomUUID();
       const response = mockResponse(s.type, execId);
       records.push({
