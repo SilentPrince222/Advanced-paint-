@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Visual Automation Builder",
+  title: "Visual Automation Builder — H0 Hackathon",
   description:
-    "Draw automation flows on an infinite canvas with version history.",
+    "Design, version, and execute automation workflows on an infinite canvas with branching history and live execution.",
 };
 
 export default function RootLayout({

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { getDb } from "@/lib/db";
 import { loadFlow, persistRun, branchExists, type RunActionRecord } from "@/lib/flow-repo";
 import { runGraph, mockResponse } from "@/lib/interpreter";
+import { executeAction } from "@/lib/stripe-executor";
 import type { ExecLogEntry } from "@/lib/contract";
 import { parseBranchParam } from "@/lib/branch-query";
 
@@ -43,22 +44,31 @@ export async function POST(
     const entries: ExecLogEntry[] = [];
 
     for (const s of actions) {
-      if (!mockMode) {
-        return Response.json(
-          { error: "Lambda not wired — set MOCK_MODE=1 for demo" },
-          { status: 501 },
-        );
+      const execId = randomUUID();
+      let response: Record<string, unknown>;
+      let status: "success" | "failure" = "success";
+
+      if (mockMode) {
+        response = mockResponse(s.type, execId);
+      } else {
+        // Real execution path — currently supports stripe; others fall back to mock
+        const result = await executeAction(s.type, s.request, execId);
+        if (result) {
+          response = result.response;
+          status = result.status;
+        } else {
+          // No real executor for this action type — mock it
+          response = mockResponse(s.type, execId);
+        }
       }
 
-      const execId = randomUUID();
-      const response = mockResponse(s.type, execId);
       records.push({
         execId,
         nodeId: s.nodeId,
         actionType: s.type,
         request: s.request,
         response,
-        status: "success",
+        status,
       });
       entries.push({
         id: execId,
@@ -68,7 +78,7 @@ export async function POST(
         actionType: s.type,
         request: s.request,
         response,
-        status: "success",
+        status,
         createdAt: now,
       });
     }

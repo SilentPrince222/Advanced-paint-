@@ -37,6 +37,7 @@ function FlowCanvasInner() {
   const onConnect = useFlowStore((state) => state.onConnect);
   const addNode = useFlowStore((state) => state.addNode);
   const { screenToFlowPosition } = useReactFlow();
+  const isEmpty = nodes.length === 0;
 
   const handleDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -68,46 +69,55 @@ function FlowCanvasInner() {
   );
 
   return (
-    <ReactFlow
-      nodes={nodes}
-      edges={edges}
-      nodeTypes={nodeTypes}
-      defaultEdgeOptions={defaultEdgeOptions}
-      onNodesChange={onNodesChange}
-      onEdgesChange={onEdgesChange}
-      onConnect={onConnect}
-      onDrop={handleDrop}
-      onDragOver={handleDragOver}
-      fitView
-      deleteKeyCode={["Backspace", "Delete"]}
-      multiSelectionKeyCode={["Meta", "Shift"]}
-      proOptions={{ hideAttribution: true }}
-    >
-      <Background
-        variant={BackgroundVariant.Dots}
-        gap={22}
-        size={2}
-        className="text-border"
-      />
-      <MiniMap
-        pannable
-        zoomable
-        nodeColor={(node) => {
-          const type = (node.data as { type?: string } | null)?.type ?? "";
-          switch (categoryOf(type)) {
-            case "trigger":
-              return "#10b981";
-            case "condition":
-              return "#f59e0b";
-            default:
-              return "#3b82f6";
-          }
-        }}
-        className="!bg-muted"
-        maskColor="rgb(0 0 0 / 0.05)"
-      />
-      <Controls className="!shadow-md" />
-    </ReactFlow>
+    <div className="relative h-full w-full">
+      {isEmpty && (
+        <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center">
+          <p className="text-sm text-muted-foreground/60">
+            Drag blocks from the palette to get started
+          </p>
+        </div>
+      )}
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        nodeTypes={nodeTypes}
+        defaultEdgeOptions={defaultEdgeOptions}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onConnect={onConnect}
+        onDrop={handleDrop}
+        onDragOver={handleDragOver}
+        fitView
+        deleteKeyCode={["Backspace", "Delete"]}
+        multiSelectionKeyCode={["Meta", "Shift"]}
+        proOptions={{ hideAttribution: true }}
+      >
+        <Background
+          variant={BackgroundVariant.Dots}
+          gap={22}
+          size={2}
+          className="text-border"
+        />
+        <MiniMap
+          pannable
+          zoomable
+          nodeColor={(node) => {
+            const type = (node.data as { type?: string } | null)?.type ?? "";
+            switch (categoryOf(type)) {
+              case "trigger":
+                return "#10b981";
+              case "condition":
+                return "#f59e0b";
+              default:
+                return "#3b82f6";
+            }
+          }}
+          className="!bg-muted"
+          maskColor="rgb(0 0 0 / 0.05)"
+        />
+        <Controls className="!shadow-md" />
+      </ReactFlow>
+    </div>
   );
 }
 
