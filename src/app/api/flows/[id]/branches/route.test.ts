@@ -76,6 +76,13 @@ describe("POST /api/flows/[id]/branches", () => {
     const body = await res.json();
     expect(body).toEqual(mockBranch);
   });
+
+  it("B20 — JSON null body → 400 not 500", async () => {
+    const res = await POST(makeReq(null), PARAMS);
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toContain("invalid JSON body");
+  });
 });
 
 describe("GET /api/flows/[id]/branches", () => {

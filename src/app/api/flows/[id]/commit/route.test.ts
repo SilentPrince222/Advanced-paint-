@@ -76,4 +76,23 @@ describe("POST /api/flows/[id]/commit", () => {
     const res = await POST(makeReq({}), PARAMS);
     expect(res.status).toBe(200);
   });
+
+  it("B20 — JSON null body → 400 not 500", async () => {
+    const res = await POST(makeReq(null), PARAMS);
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toContain("invalid JSON body");
+  });
+
+  it("B21 — ?branch= empty string → 400 unknown branch", async () => {
+    const req = new Request("http://x/api/flows/demo/commit?branch=", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const res = await POST(req, PARAMS);
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toContain("unknown branch");
+  });
 });

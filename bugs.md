@@ -137,11 +137,43 @@ Tree hunted: `7f07aeb` (clean working tree). Scope: `src/lib/*`, `src/app/api/fl
 
 ---
 
+## Hunt 2026-06-23 — API boundary + branch isolation (3 hunters, hybrid)
+
+Tree hunted: `2376a57` (clean working tree). Scope: `src/app/api/flows/**`, `src/lib/flow-repo.ts`.
+
+---
+
+### B17 — cross-branch rollback applies foreign snapshot to active branch — MAJOR — fixed
+- class: data-integrity / branch isolation · location: src/lib/flow-repo.ts:474-477 · found-by: H2 H3
+- symptom: `rollbackToCommit` loaded commit by `(id, flow_id)` only — a commit from branch `experiment` could restore onto `main`.
+- trigger: fork branch, commit on experiment, `POST /rollback {toCommitId: cExp}` on main.
+- expected vs actual: reject (404/null). Actual (before fix): main overwritten with experiment snapshot.
+- test: src/lib/flow-repo.test.ts::B17 (integration, requires DATABASE_URL)
+- history: reported 06-23 → proven 06-23 → fixed 06-23
+
+### B20 — JSON `null` body on POST routes → 500 not 400 — MINOR — fixed
+- class: error-handling · location: commit/rollback/branches routes · found-by: H1
+- symptom: `req.json()` on `null` assigns `body = null`; `"authorNote" in body` / `body.toCommitId` throws → outer catch → 500.
+- trigger: `POST .../commit` with body `null`.
+- expected vs actual: 400 "invalid JSON body". Actual (before fix): 500.
+- test: commit/route.test.ts::B20, rollback/route.test.ts::B20, branches/route.test.ts::B20
+- history: reported 06-23 → proven 06-23 → fixed 06-23
+
+### B21 — `?branch=` empty string bypasses branch guard, runs main — MINOR — fixed
+- class: input-validation · location: all branch-scoped routes · found-by: H1
+- symptom: `searchParams.get("branch")` returns `""`; falsy skips `branchExists` check; `loadFlow(..., "")` falls back to main.
+- trigger: `POST /run?branch=` executes main graph without error.
+- expected vs actual: 400 "unknown branch". Actual (before fix): 200 against main.
+- test: commit/route.test.ts::B21, run/route.test.ts::B21
+- history: reported 06-23 → proven 06-23 → fixed 06-23
+
+### Deferred from this hunt
+- **B18** GET `/commits` flow-scoped, no `branchId` in payload — enables cross-branch rollback in UI (pairs with B17 fix at repo layer).
+- **B19** concurrent PUT + commit forks head snapshot from live tables — needs `saveFlow` FOR UPDATE (pairs with B08/B09).
+
+---
+
 ## Plan for this round
 
-- **Fix now, Opus (data integrity at the API boundary, one owner for route.ts + contract.ts):** B01, B02, B03, B04, B05, B06, B07.
-- **Fix now, sonnet (easy, single-file, serial):** B12 + B13 (editor.tsx); B11 (verify-db.ts).
-- **Deferred, recommended top follow-up:** B08, B09 (concurrency — pair them, FOR UPDATE + read transaction).
-- **Deferred to Rung 4/6 (owns condition + trigger semantics):** B14, B15, B16.
-- **Record only:** B10 (Stripe, not-test-verifiable, Rung 4).
-- Every shipped fix lands with its red→green test (B11 is the script exception: manual verify).
+- **Fixed 06-23:** B17, B20, B21.
+- **Deferred top follow-up:** B18, B19, B08, B09.

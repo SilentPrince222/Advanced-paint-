@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { getDb } from "@/lib/db";
 import { createBranch, listBranches } from "@/lib/flow-repo";
+import { parseJsonObject } from "@/lib/parse-json-body";
 
 /**
  * GET /api/flows/:id/branches → Branch[] (run 3b-2). Ordered by name; the first
@@ -33,12 +34,9 @@ export async function POST(
 ) {
   const { id } = await params;
   try {
-    let body: Record<string, unknown> = {};
-    try {
-      body = (await req.json()) as Record<string, unknown>;
-    } catch {
-      return Response.json({ error: "invalid JSON body" }, { status: 400 });
-    }
+    const parsed = await parseJsonObject(req);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.body;
 
     if (!body.name || typeof body.name !== "string") {
       return Response.json({ error: "missing name" }, { status: 400 });

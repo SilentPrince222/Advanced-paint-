@@ -471,10 +471,10 @@ export async function rollbackToCommit(
     }
     const parentId: string | null = branchRes.rows[0].head_commit_id ?? null;
 
-    // Load target snapshot — flow-scoped to reject cross-flow commit ids
+    // Load target snapshot — flow-scoped + branch-scoped (B17: reject cross-branch commits)
     const commitRes = await c.query(
-      `SELECT graph_snapshot FROM "commit" WHERE id = $1 AND flow_id = $2`,
-      [toCommitId, flowId],
+      `SELECT graph_snapshot FROM "commit" WHERE id = $1 AND flow_id = $2 AND branch_id = $3`,
+      [toCommitId, flowId, branchId],
     );
     if (commitRes.rowCount === 0) {
       await c.query("ROLLBACK");

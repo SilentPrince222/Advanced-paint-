@@ -1,24 +1,25 @@
 import { randomUUID } from "node:crypto";
 import { getDb } from "@/lib/db";
 import { rollbackToCommit, branchExists } from "@/lib/flow-repo";
+import { parseBranchParam } from "@/lib/branch-query";
+import { parseJsonObject } from "@/lib/parse-json-body";
 
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const branch = new URL(req.url).searchParams.get("branch") ?? undefined;
+  const branchParsed = parseBranchParam(req.url);
+  if (!branchParsed.ok) return branchParsed.response;
+  const branch = branchParsed.branch;
   try {
     if (branch && !(await branchExists(getDb(), id, branch))) {
       return Response.json({ error: "unknown branch" }, { status: 400 });
     }
 
-    let body: Record<string, unknown> = {};
-    try {
-      body = (await req.json()) as Record<string, unknown>;
-    } catch {
-      return Response.json({ error: "invalid JSON body" }, { status: 400 });
-    }
+    const parsed = await parseJsonObject(req);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.body;
 
     if (!body.toCommitId || typeof body.toCommitId !== "string") {
       return Response.json({ error: "missing toCommitId" }, { status: 400 });

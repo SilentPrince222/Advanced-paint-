@@ -3,13 +3,16 @@ import { getDb } from "@/lib/db";
 import { loadFlow, persistRun, branchExists, type RunActionRecord } from "@/lib/flow-repo";
 import { runGraph, mockResponse } from "@/lib/interpreter";
 import type { ExecLogEntry } from "@/lib/contract";
+import { parseBranchParam } from "@/lib/branch-query";
 
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const branch = new URL(req.url).searchParams.get("branch") ?? undefined;
+  const branchParsed = parseBranchParam(req.url);
+  if (!branchParsed.ok) return branchParsed.response;
+  const branch = branchParsed.branch;
   try {
     if (branch && !(await branchExists(getDb(), id, branch))) {
       return Response.json({ error: "unknown branch" }, { status: 400 });

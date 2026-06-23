@@ -251,6 +251,36 @@ describe.skipIf(!process.env.DATABASE_URL)("createBranch + branch isolation", ()
     // Unknown branch id → false
     expect(await branchExists(pool, flowId, "no-such-branch")).toBe(false);
   });
+
+  it("B17 — rollbackToCommit rejects a commit from another branch", async () => {
+    const mainBranchId = `${flowId}-main`;
+
+    await saveFlow(pool, flowId, docA);
+    const cMain = randomUUID();
+    await commitFlow(pool, flowId, cMain, "main v1");
+
+    const branchId = randomUUID();
+    await createBranch(pool, flowId, "exp", cMain, branchId);
+
+    await saveFlow(pool, flowId, docB, branchId);
+    const cExp = randomUUID();
+    await commitFlow(pool, flowId, cExp, "exp v1", branchId);
+
+    const mainBefore = await loadFlow(pool, flowId, mainBranchId);
+    expect(mainBefore).toEqual(docA);
+
+    const result = await rollbackToCommit(
+      pool,
+      flowId,
+      cExp,
+      randomUUID(),
+      mainBranchId,
+    );
+    expect(result).toBeNull();
+
+    const mainAfter = await loadFlow(pool, flowId, mainBranchId);
+    expect(mainAfter).toEqual(mainBefore);
+  });
 });
 
 describe.skipIf(!process.env.DATABASE_URL)("B09 — sequential persistRun build a linear parent chain", () => {
