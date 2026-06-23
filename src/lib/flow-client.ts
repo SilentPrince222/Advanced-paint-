@@ -1,4 +1,4 @@
-import type { GraphDocument } from "@/lib/contract";
+import type { ExecLogEntry, GraphDocument } from "@/lib/contract";
 
 export const DEMO_FLOW_ID = "demo";
 
@@ -31,4 +31,24 @@ export async function saveFlowToServer(
     const text = await res.text().catch(() => res.statusText);
     throw new Error(`saveFlowToServer failed: ${res.status} ${text}`);
   }
+}
+
+export interface RunResult {
+  commitId: string | null;
+  entries: ExecLogEntry[];
+}
+
+/**
+ * Run the saved flow on the server (interpreter → mock actions → exec_log).
+ * Throws on any non-OK response.
+ */
+export async function runFlow(id: string): Promise<RunResult> {
+  const res = await fetch(`/api/flows/${encodeURIComponent(id)}/run`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText);
+    throw new Error(`runFlow failed: ${res.status} ${text}`);
+  }
+  return res.json() as Promise<RunResult>;
 }

@@ -92,6 +92,86 @@ export async function saveFlow(
   }
 }
 
+/**
+ * One run's persisted action row. ids (execId) are minted by the caller (route),
+ * written verbatim — matching saveFlow's "client ids are authoritative" idiom.
+ */
+export interface RunActionRecord {
+  execId: string;
+  nodeId: string;
+  actionType: NodeType;
+  request: Record<string, unknown>;
+  response: Record<string, unknown>;
+  status: "success" | "failure";
+}
+
+/**
+ * Persist one run in a single transaction:
+ *   SELECT branch head → INSERT "commit" (snapshot) → UPDATE branch head →
+ *   INSERT one exec_log row per fired action.
+ *
+ * - `"commit"` is quoted in DML because `commit` is a SQL keyword.
+ * - jsonb params are always JSON.stringify()'d + $n::jsonb cast (saveFlow idiom).
+ * - No id generation here — commitId and each record.execId are passed in.
+ */
+export async function persistRun(
+  pool: Pool,
+  flowId: string,
+  commitId: string,
+  snapshot: GraphDocument,
+  records: RunActionRecord[],
+): Promise<void> {
+  const branchId = `${flowId}-main`;
+  const c: PoolClient = await pool.connect();
+  try {
+    await c.query("BEGIN");
+
+    const b = await c.query(
+      `SELECT head_commit_id FROM branch WHERE id = $1`,
+      [branchId],
+    );
+    if (b.rowCount === 0) {
+      throw new Error(`branch not found: ${branchId} — save the flow first`);
+    }
+    const parentId: string | null = b.rows[0].head_commit_id ?? null;
+
+    await c.query(
+      `INSERT INTO "commit" (id, flow_id, branch_id, parent_id, author_note, graph_snapshot)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb)`,
+      [commitId, flowId, branchId, parentId, "run", JSON.stringify(snapshot)],
+    );
+
+    await c.query(`UPDATE branch SET head_commit_id = $1 WHERE id = $2`, [
+      commitId,
+      branchId,
+    ]);
+
+    for (const r of records) {
+      await c.query(
+        `INSERT INTO exec_log (id, flow_id, commit_id, node_id, action_type, request, response, status)
+         VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8)`,
+        [
+          r.execId,
+          flowId,
+          commitId,
+          r.nodeId,
+          r.actionType,
+          JSON.stringify(r.request),
+          JSON.stringify(r.response),
+          r.status,
+        ],
+      );
+    }
+
+    await c.query("COMMIT");
+  } catch (e) {
+    await c.query("ROLLBACK");
+    throw e;
+  } finally {
+    c.release();
+  }
+}
+
 export async function loadFlow(
   pool: Pool,
   flowId: string,
