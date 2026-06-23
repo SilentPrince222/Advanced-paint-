@@ -45,6 +45,15 @@ export function Editor() {
     };
   }, [fromDoc]);
 
+  // B13: a "saved" badge must not survive an edit. Subscribe to the store and
+  // clear it on any canvas mutation — the lint-blessed "setState inside a store
+  // subscription callback" pattern, not a synchronous setState-in-effect.
+  useEffect(() => {
+    return useFlowStore.subscribe(() => {
+      setStatus((s) => (s === "saved" ? "idle" : s));
+    });
+  }, []);
+
   const onSave = async () => {
     setStatus("saving");
     try {
@@ -98,7 +107,7 @@ export function Editor() {
             <Button
               size="sm"
               onClick={onRun}
-              disabled={running || status === "loading"}
+              disabled={running || status === "saving" || status === "loading"}
             >
               {running ? <Loader2 className="animate-spin" /> : <Play />}
               {running ? "Running…" : "Run"}
@@ -107,7 +116,7 @@ export function Editor() {
               size="sm"
               variant="outline"
               onClick={onSave}
-              disabled={status === "saving" || status === "loading"}
+              disabled={running || status === "saving" || status === "loading"}
             >
               {status === "saving" ? (
                 <Loader2 className="animate-spin" />

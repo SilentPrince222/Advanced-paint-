@@ -26,7 +26,9 @@ async function main(): Promise<void> {
 
     console.log(`OK — connected at ${now}`);
     if (tables.length === 0) {
-      console.log("Tables: (none — run npm run db:init)");
+      // Schema absent — fail non-zero so `npm run verify:db && ...` can gate CI (B11).
+      console.error("Tables: (none — run npm run db:init)");
+      process.exitCode = 1;
     } else {
       console.log(`Tables: ${tables.join(", ")}`);
     }

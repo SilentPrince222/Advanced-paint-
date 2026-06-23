@@ -132,6 +132,6 @@ export const paramSchemas = {
   "trigger.webhook": z.strictObject({}),
   "trigger.schedule": z.strictObject({ cron: z.string() }),
   "condition.if": z.strictObject({ expression: z.string() }),
-  "action.stripe.charge": z.strictObject({ amount: z.number(), currency: z.string() }),
+  "action.stripe.charge": z.strictObject({ amount: z.number().int().nonnegative(), currency: z.string() }),
   "action.slack.post": z.strictObject({ channel: z.string(), message: z.string() }),
 } satisfies Record<NodeType, z.ZodType>;

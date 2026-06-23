@@ -59,6 +59,6 @@ export async function POST(
     return Response.json({ commitId, entries });
   } catch (e) {
     console.error("[POST /api/flows/:id/run]", e);
-    return Response.json({ error: String(e) }, { status: 500 });
+    return Response.json({ error: "internal server error" }, { status: 500 });
   }
 }
