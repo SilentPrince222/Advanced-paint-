@@ -11,6 +11,7 @@ vi.mock("@/lib/flow-client", () => ({
   diffFlow: vi.fn(),
   listBranches: vi.fn().mockResolvedValue([]),
   createBranch: vi.fn(),
+  listExecLog: vi.fn().mockResolvedValue([]),
 }));
 
 // Mock DiffView to prevent it from firing diffFlow effects in panel tests
@@ -26,11 +27,14 @@ vi.mock("@/lib/flow-store", () => {
   });
   const fromGraphDocument = vi.fn();
   const setCurrentBranchId = vi.fn();
+  const bumpExecLog = vi.fn();
   const storeState = {
     nodes: [],
     edges: [],
     currentBranchId: undefined,
     setCurrentBranchId,
+    execLogNonce: 0,
+    bumpExecLog,
   };
   return {
     useFlowStore: Object.assign(
@@ -41,6 +45,8 @@ vi.mock("@/lib/flow-store", () => {
           fromGraphDocument,
           currentBranchId: undefined,
           setCurrentBranchId,
+          execLogNonce: 0,
+          bumpExecLog,
         }),
       },
     ),

@@ -162,4 +162,16 @@ describe("flow-store", () => {
       expect(useFlowStore.getState().currentBranchId).toBeUndefined();
     });
   });
+
+  describe("execLogNonce (run 5)", () => {
+    it("defaults to 0 and increments via bumpExecLog", () => {
+      expect(useFlowStore.getState().execLogNonce).toBe(0);
+
+      useFlowStore.getState().bumpExecLog();
+      expect(useFlowStore.getState().execLogNonce).toBe(1);
+
+      useFlowStore.getState().bumpExecLog();
+      expect(useFlowStore.getState().execLogNonce).toBe(2);
+    });
+  });
 });

@@ -7,6 +7,7 @@ import type {
   NodeType,
   CommitMeta,
   Branch,
+  ExecLogEntry,
 } from "@/lib/contract";
 
 /**
@@ -405,6 +406,38 @@ export async function listCommits(
     id: row.id as string,
     parentId: (row.parent_id as string | null) ?? null,
     authorNote: row.author_note as string,
+    createdAt: new Date(row.created_at as string | Date).toISOString(),
+  }));
+}
+
+/**
+ * Read exec_log rows for a flow (append-only, enforced by trigger + REVOKE).
+ * No transaction needed — plain SELECT cannot tear on an insert-only table.
+ * Unknown flow → empty array.
+ *
+ * Tiebreak note: same-ms ordering is non-deterministic because id=randomUUID.
+ * This is accepted for the demo viewer.
+ */
+export async function listExecLog(
+  pool: Pool,
+  flowId: string,
+): Promise<ExecLogEntry[]> {
+  const res = await pool.query(
+    `SELECT id, flow_id, commit_id, node_id, action_type, request, response, status, created_at
+     FROM exec_log
+     WHERE flow_id = $1
+     ORDER BY created_at DESC, id DESC`,
+    [flowId],
+  );
+  return res.rows.map((row) => ({
+    id: row.id as string,
+    flowId: row.flow_id as string,
+    commitId: row.commit_id as string,
+    nodeId: row.node_id as string,
+    actionType: row.action_type as NodeType,
+    request: row.request as Record<string, unknown>,
+    response: row.response as Record<string, unknown>,
+    status: (row.status as "success" | "failure"),
     createdAt: new Date(row.created_at as string | Date).toISOString(),
   }));
 }

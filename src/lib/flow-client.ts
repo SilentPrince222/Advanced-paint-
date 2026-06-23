@@ -89,6 +89,19 @@ export async function listCommits(id: string): Promise<CommitMeta[]> {
 }
 
 /**
+ * List exec_log entries for a flow (append-only audit trail).
+ * Throws on any non-OK response.
+ */
+export async function listExecLog(id: string): Promise<ExecLogEntry[]> {
+  const res = await fetch(`/api/flows/${encodeURIComponent(id)}/exec-log`);
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText);
+    throw new Error(`listExecLog failed: ${res.status} ${text}`);
+  }
+  return res.json() as Promise<ExecLogEntry[]>;
+}
+
+/**
  * Forward-rollback to a prior commit.
  * Returns the new forward commit and the restored graph document.
  * Throws on any non-OK response.

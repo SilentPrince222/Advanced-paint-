@@ -11,6 +11,7 @@
     "test:watch": "vitest",
     "db:init": "tsx --env-file=.env scripts/init-db.ts",
     "verify:db": "tsx --env-file=.env scripts/verify-db.ts",
+    "verify:immutability": "tsx --env-file=.env scripts/verify-immutability.ts",
     "verify:stripe": "tsx --env-file=.env scripts/verify-stripe.ts"
   },
   "dependencies": {

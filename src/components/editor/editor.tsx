@@ -21,6 +21,7 @@ export function Editor() {
   const toDoc = useFlowStore((s) => s.toGraphDocument);
   const fromDoc = useFlowStore((s) => s.fromGraphDocument);
   const currentBranchId = useFlowStore((s) => s.currentBranchId);
+  const bumpExecLog = useFlowStore((s) => s.bumpExecLog);
 
   const [status, setStatus] = useState<
     "idle" | "loading" | "saving" | "saved" | "error"
@@ -77,6 +78,7 @@ export function Editor() {
     try {
       await saveFlowToServer(DEMO_FLOW_ID, toDoc(), currentBranchId);
       setRunResult(await runFlow(DEMO_FLOW_ID, currentBranchId));
+      bumpExecLog();
     } catch (e) {
       setRunError(String(e));
     } finally {

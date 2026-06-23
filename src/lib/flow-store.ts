@@ -62,6 +62,9 @@ export interface FlowState {
   /** active branch id; undefined ≡ main ≡ no `?branch=` (run 3b-2). */
   currentBranchId: string | undefined;
   setCurrentBranchId: (id: string | undefined) => void;
+  /** nonce to force ExecLogViewer re-fetch after runs/rollbacks */
+  execLogNonce: number;
+  bumpExecLog: () => void;
 }
 
 export const useFlowStore = create<FlowState>((set, get) => ({
@@ -149,6 +152,12 @@ export const useFlowStore = create<FlowState>((set, get) => ({
 
   currentBranchId: undefined,
   setCurrentBranchId: (id) => set({ currentBranchId: id }),
+
+  execLogNonce: 0,
+  bumpExecLog: () => {
+    const next = get().execLogNonce + 1;
+    set({ execLogNonce: next });
+  },
 }));
 
 // Re-export for callers that derive UI purely from a node's `type`.

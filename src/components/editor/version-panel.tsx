@@ -14,10 +14,12 @@ import {
 } from "@/lib/flow-client";
 import type { Branch, CommitMeta } from "@/lib/contract";
 import { DiffView } from "@/components/editor/diff-view";
+import { ExecLogViewer } from "@/components/editor/exec-log-viewer";
 
 export function VersionPanel() {
   const currentBranchId = useFlowStore((s) => s.currentBranchId);
   const setCurrentBranchId = useFlowStore((s) => s.setCurrentBranchId);
+  const bumpExecLog = useFlowStore((s) => s.bumpExecLog);
 
   const [commits, setCommits] = useState<CommitMeta[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -84,6 +86,7 @@ export function VersionPanel() {
       const res = await rollbackFlow(DEMO_FLOW_ID, commitId, currentBranchId);
       useFlowStore.getState().fromGraphDocument(res.doc);
       await refresh();
+      bumpExecLog();
     } catch (e) {
       setError(String(e));
     } finally {
@@ -215,6 +218,8 @@ export function VersionPanel() {
           </div>
         </div>
       )}
+
+      <ExecLogViewer />
     </aside>
   );
 }
