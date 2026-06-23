@@ -9,6 +9,8 @@ vi.mock("@/lib/flow-client", () => ({
   listCommits: vi.fn(),
   rollbackFlow: vi.fn(),
   diffFlow: vi.fn(),
+  listBranches: vi.fn().mockResolvedValue([]),
+  createBranch: vi.fn(),
 }));
 
 // Mock DiffView to prevent it from firing diffFlow effects in panel tests
@@ -23,12 +25,23 @@ vi.mock("@/lib/flow-store", () => {
     views: [],
   });
   const fromGraphDocument = vi.fn();
+  const setCurrentBranchId = vi.fn();
+  const storeState = {
+    nodes: [],
+    edges: [],
+    currentBranchId: undefined,
+    setCurrentBranchId,
+  };
   return {
     useFlowStore: Object.assign(
-      (selector: (s: { nodes: unknown[]; edges: unknown[] }) => unknown) =>
-        selector({ nodes: [], edges: [] }),
+      (selector: (s: typeof storeState) => unknown) => selector(storeState),
       {
-        getState: vi.fn().mockReturnValue({ toGraphDocument, fromGraphDocument }),
+        getState: vi.fn().mockReturnValue({
+          toGraphDocument,
+          fromGraphDocument,
+          currentBranchId: undefined,
+          setCurrentBranchId,
+        }),
       },
     ),
   };
@@ -37,6 +50,8 @@ vi.mock("@/lib/flow-store", () => {
 import { VersionPanel } from "./version-panel";
 import {
   commitFlow,
+  createBranch,
+  listBranches,
   listCommits,
   rollbackFlow,
   saveFlowToServer,
@@ -70,10 +85,19 @@ const mockDoc = {
   views: [] as never[],
 };
 
+const mockMainBranch = {
+  id: "demo-main",
+  flowId: "demo",
+  name: "main",
+  headCommitId: "aaaabbbbccccdddd",
+  baseCommitId: null,
+};
+
 describe("VersionPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(listCommits).mockResolvedValue([]);
+    vi.mocked(listBranches).mockResolvedValue([]);
     vi.mocked(diffFlow).mockResolvedValue(emptyDiff as never);
   });
 
@@ -99,8 +123,9 @@ describe("VersionPanel", () => {
       expect(vi.mocked(saveFlowToServer)).toHaveBeenCalledWith(
         "demo",
         expect.objectContaining({ nodes: expect.any(Array) }),
+        undefined,
       );
-      expect(vi.mocked(commitFlow)).toHaveBeenCalledWith("demo", "v1");
+      expect(vi.mocked(commitFlow)).toHaveBeenCalledWith("demo", "v1", undefined);
     });
   });
 
@@ -119,7 +144,11 @@ describe("VersionPanel", () => {
     fireEvent.click(rollbackBtn);
 
     await waitFor(() => {
-      expect(vi.mocked(rollbackFlow)).toHaveBeenCalledWith("demo", mockCommitMeta.id);
+      expect(vi.mocked(rollbackFlow)).toHaveBeenCalledWith(
+        "demo",
+        mockCommitMeta.id,
+        undefined,
+      );
       expect(useFlowStore.getState().fromGraphDocument).toHaveBeenCalledWith(mockDoc);
     });
   });
@@ -154,5 +183,96 @@ describe("VersionPanel", () => {
     await waitFor(() => {
       expect(screen.getByTestId("diff-view")).toBeTruthy();
     });
+  });
+
+  it("selector renders the main option from listBranches and is enabled once loaded", async () => {
+    vi.mocked(listBranches).mockResolvedValue([mockMainBranch]);
+
+    render(<VersionPanel />);
+
+    const select = await screen.findByRole("combobox");
+    await waitFor(() => {
+      expect(select).toHaveProperty("disabled", false);
+    });
+    expect(select).toHaveProperty("value", "demo-main");
+    expect(screen.getByRole("option", { name: "main" })).toBeTruthy();
+  });
+
+  it("picking a branch calls setCurrentBranchId with its id", async () => {
+    const experimentBranch = {
+      id: "branch-uuid",
+      flowId: "demo",
+      name: "experiment",
+      headCommitId: null,
+      baseCommitId: null,
+    };
+    vi.mocked(listBranches).mockResolvedValue([mockMainBranch, experimentBranch]);
+
+    render(<VersionPanel />);
+
+    const select = await screen.findByRole("combobox");
+    await waitFor(() => {
+      expect(select).toHaveProperty("disabled", false);
+    });
+
+    fireEvent.change(select, { target: { value: "branch-uuid" } });
+
+    await waitFor(() => {
+      expect(useFlowStore.getState().setCurrentBranchId).toHaveBeenCalledWith(
+        "branch-uuid",
+      );
+    });
+  });
+
+  it("Branch button forks from the active branch's headCommitId then setCurrentBranchId", async () => {
+    // currentBranchId undefined → resolves to main; main.headCommitId = mockCommitMeta.id
+    vi.mocked(listCommits).mockResolvedValue([mockCommitMeta]);
+    vi.mocked(listBranches).mockResolvedValue([mockMainBranch]);
+    const created = {
+      id: "new-branch",
+      flowId: "demo",
+      name: "experiment",
+      headCommitId: mockCommitMeta.id,
+      baseCommitId: mockCommitMeta.id,
+    };
+    vi.mocked(createBranch).mockResolvedValue(created);
+
+    render(<VersionPanel />);
+
+    const nameInput = await screen.findByPlaceholderText(/branch name/i);
+    fireEvent.change(nameInput, { target: { value: "experiment" } });
+
+    const branchBtn = screen.getByRole("button", { name: /^branch$/i });
+    await waitFor(() => {
+      expect(branchBtn).toHaveProperty("disabled", false);
+    });
+    fireEvent.click(branchBtn);
+
+    await waitFor(() => {
+      expect(vi.mocked(createBranch)).toHaveBeenCalledWith(
+        "demo",
+        "experiment",
+        mockCommitMeta.id,
+      );
+    });
+    await waitFor(() => {
+      expect(useFlowStore.getState().setCurrentBranchId).toHaveBeenCalledWith(
+        "new-branch",
+      );
+    });
+  });
+
+  it("Branch button is disabled when the active branch has no headCommitId yet", async () => {
+    const headlessMain = { ...mockMainBranch, headCommitId: null };
+    vi.mocked(listCommits).mockResolvedValue([mockCommitMeta]);
+    vi.mocked(listBranches).mockResolvedValue([headlessMain]);
+
+    render(<VersionPanel />);
+
+    const nameInput = await screen.findByPlaceholderText(/branch name/i);
+    fireEvent.change(nameInput, { target: { value: "experiment" } });
+
+    const branchBtn = screen.getByRole("button", { name: /^branch$/i });
+    expect(branchBtn).toHaveProperty("disabled", true);
   });
 });

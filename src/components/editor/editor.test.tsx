@@ -14,6 +14,8 @@ vi.mock("@/lib/flow-client", () => ({
   commitFlow: vi.fn(),
   rollbackFlow: vi.fn(),
   diffFlow: vi.fn(),
+  listBranches: vi.fn().mockResolvedValue([]),
+  createBranch: vi.fn(),
 }));
 
 beforeEach(async () => {

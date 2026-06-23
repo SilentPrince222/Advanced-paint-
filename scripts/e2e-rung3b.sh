@@ -143,6 +143,25 @@ EOF
 )
 echo "B = ${B}"
 
+echo "==> GET /api/flows/demo/branches — assert HTTP 200, length 2, names include main+experiment..."
+BRANCH_LIST_RESP=$(curl -sf "http://localhost:${PORT}/api/flows/demo/branches")
+echo "BRANCH_LIST response: ${BRANCH_LIST_RESP}"
+
+node --input-type=module <<EOF
+const list = ${BRANCH_LIST_RESP};
+const errors = [];
+if (!Array.isArray(list)) errors.push("branch list is not an array");
+if (list.length !== 2) errors.push(\`expected length 2, got \${list.length}\`);
+const names = list.map((b) => b.name).sort();
+if (!names.includes("main")) errors.push(\`names missing 'main': \${names.join(",")}\`);
+if (!names.includes("experiment")) errors.push(\`names missing 'experiment': \${names.join(",")}\`);
+if (errors.length > 0) {
+  console.error("ASSERTION FAILED (GET /branches):", errors.join("; "));
+  process.exit(1);
+}
+console.log("GET /branches ASSERTION PASSED: length 2, names include main+experiment");
+EOF
+
 echo "==> PUT /api/flows/demo?branch=B (fixture amount=90)..."
 curl -sf -X PUT \
   -H "Content-Type: application/json" \

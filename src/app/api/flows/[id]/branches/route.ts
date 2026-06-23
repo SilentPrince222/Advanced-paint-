@@ -1,6 +1,25 @@
 import { randomUUID } from "node:crypto";
 import { getDb } from "@/lib/db";
-import { createBranch } from "@/lib/flow-repo";
+import { createBranch, listBranches } from "@/lib/flow-repo";
+
+/**
+ * GET /api/flows/:id/branches → Branch[] (run 3b-2). Ordered by name; the first
+ * row is the default `main` branch. Read-only — mirrors the POST below + the
+ * diff/route.ts GET precedent.
+ */
+export async function GET(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+  try {
+    const branches = await listBranches(getDb(), id);
+    return Response.json(branches);
+  } catch (e) {
+    console.error("[GET /api/flows/:id/branches]", e);
+    return Response.json({ error: "internal server error" }, { status: 500 });
+  }
+}
 
 /**
  * POST /api/flows/:id/branches  {name, fromCommitId} → Branch (SPEC §2.4).

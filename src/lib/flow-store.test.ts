@@ -150,4 +150,16 @@ describe("flow-store", () => {
       expect(out).toEqual(doc);
     });
   });
+
+  describe("currentBranchId (run 3b-2)", () => {
+    it("defaults to undefined (≡ main) and round-trips through setCurrentBranchId", () => {
+      expect(useFlowStore.getState().currentBranchId).toBeUndefined();
+
+      useFlowStore.getState().setCurrentBranchId("branch-1");
+      expect(useFlowStore.getState().currentBranchId).toBe("branch-1");
+
+      useFlowStore.getState().setCurrentBranchId(undefined);
+      expect(useFlowStore.getState().currentBranchId).toBeUndefined();
+    });
+  });
 });

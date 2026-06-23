@@ -2,10 +2,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // vi.mock calls BEFORE imports of the module under test
 vi.mock("@/lib/db", () => ({ getDb: () => ({}) }));
-vi.mock("@/lib/flow-repo", () => ({ createBranch: vi.fn() }));
+vi.mock("@/lib/flow-repo", () => ({ createBranch: vi.fn(), listBranches: vi.fn() }));
 
-import { POST } from "./route";
-import { createBranch } from "@/lib/flow-repo";
+import { GET, POST } from "./route";
+import { createBranch, listBranches } from "@/lib/flow-repo";
 
 const PARAMS = { params: Promise.resolve({ id: "demo" }) };
 
@@ -24,6 +24,17 @@ const mockBranch = {
   headCommitId: "c1",
   baseCommitId: "c1",
 };
+
+const mockList = [
+  {
+    id: "demo-main",
+    flowId: "demo",
+    name: "main",
+    headCommitId: null,
+    baseCommitId: null,
+  },
+  mockBranch,
+];
 
 describe("POST /api/flows/[id]/branches", () => {
   beforeEach(() => {
@@ -64,5 +75,20 @@ describe("POST /api/flows/[id]/branches", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toEqual(mockBranch);
+  });
+});
+
+describe("GET /api/flows/[id]/branches", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("happy path → 200 with the branch list", async () => {
+    vi.mocked(listBranches).mockResolvedValueOnce(mockList);
+    const res = await GET(new Request("http://x/api/flows/demo/branches"), PARAMS);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual(mockList);
+    expect(vi.mocked(listBranches)).toHaveBeenCalledWith(expect.anything(), "demo");
   });
 });

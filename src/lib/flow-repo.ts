@@ -586,3 +586,28 @@ export async function branchExists(
   );
   return res.rowCount !== null && res.rowCount > 0;
 }
+
+/**
+ * List branches for a flow, ordered by name (run 3b-2 — mirrors branchExists's
+ * query idiom). The first row is the default `main` branch (saveFlow).
+ * head_commit_id / base_commit_id are soft pointers (no FK, may be NULL) → `?? null`.
+ */
+export async function listBranches(
+  pool: Pool,
+  flowId: string,
+): Promise<Branch[]> {
+  const res = await pool.query(
+    `SELECT id, flow_id, name, head_commit_id, base_commit_id
+       FROM branch
+      WHERE flow_id = $1
+      ORDER BY name`,
+    [flowId],
+  );
+  return res.rows.map((r: Record<string, unknown>) => ({
+    id: r.id as string,
+    flowId: r.flow_id as string,
+    name: r.name as string,
+    headCommitId: (r.head_commit_id as string | null) ?? null,
+    baseCommitId: (r.base_commit_id as string | null) ?? null,
+  }));
+}

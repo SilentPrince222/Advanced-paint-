@@ -59,6 +59,9 @@ export interface FlowState {
   toGraphDocument: () => GraphDocument;
   /** load a GraphDocument back onto the canvas */
   fromGraphDocument: (document: GraphDocument) => void;
+  /** active branch id; undefined ≡ main ≡ no `?branch=` (run 3b-2). */
+  currentBranchId: string | undefined;
+  setCurrentBranchId: (id: string | undefined) => void;
 }
 
 export const useFlowStore = create<FlowState>((set, get) => ({
@@ -143,6 +146,9 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   fromGraphDocument: (document) => {
     set(fromGraphDocument(document));
   },
+
+  currentBranchId: undefined,
+  setCurrentBranchId: (id) => set({ currentBranchId: id }),
 }));
 
 // Re-export for callers that derive UI purely from a node's `type`.

@@ -20,6 +20,7 @@ export function Editor() {
   const edgeCount = useFlowStore((state) => state.edges.length);
   const toDoc = useFlowStore((s) => s.toGraphDocument);
   const fromDoc = useFlowStore((s) => s.fromGraphDocument);
+  const currentBranchId = useFlowStore((s) => s.currentBranchId);
 
   const [status, setStatus] = useState<
     "idle" | "loading" | "saving" | "saved" | "error"
@@ -29,12 +30,16 @@ export function Editor() {
   const [runResult, setRunResult] = useState<RunResult | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
 
-  // Load on mount
+  // Load on mount + on branch switch (single owner of ALL graph loading — no
+  // race: VersionPanel only flips currentBranchId, Editor re-fetches). The
+  // loading status is set inside the async path (not synchronously in the effect
+  // body) to avoid the set-state-in-effect cascade.
   useEffect(() => {
     let live = true;
     (async () => {
+      if (live) setStatus("loading");
       try {
-        const d = await fetchFlow(DEMO_FLOW_ID);
+        const d = await fetchFlow(DEMO_FLOW_ID, currentBranchId);
         if (live && d) fromDoc(d);
         if (live) setStatus("idle");
       } catch {
@@ -44,7 +49,7 @@ export function Editor() {
     return () => {
       live = false;
     };
-  }, [fromDoc]);
+  }, [fromDoc, currentBranchId]);
 
   // B13: a "saved" badge must not survive an edit. Subscribe to the store and
   // clear it on any canvas mutation — the lint-blessed "setState inside a store
@@ -58,7 +63,7 @@ export function Editor() {
   const onSave = async () => {
     setStatus("saving");
     try {
-      await saveFlowToServer(DEMO_FLOW_ID, toDoc());
+      await saveFlowToServer(DEMO_FLOW_ID, toDoc(), currentBranchId);
       setStatus("saved");
     } catch {
       setStatus("error");
@@ -70,8 +75,8 @@ export function Editor() {
     setRunResult(null);
     setRunError(null);
     try {
-      await saveFlowToServer(DEMO_FLOW_ID, toDoc());
-      setRunResult(await runFlow(DEMO_FLOW_ID));
+      await saveFlowToServer(DEMO_FLOW_ID, toDoc(), currentBranchId);
+      setRunResult(await runFlow(DEMO_FLOW_ID, currentBranchId));
     } catch (e) {
       setRunError(String(e));
     } finally {
