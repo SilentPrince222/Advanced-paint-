@@ -6,6 +6,7 @@ import type {
   NodeView,
   NodeType,
   CommitMeta,
+  Branch,
 } from "@/lib/contract";
 
 /**
@@ -57,69 +58,90 @@ function rowsToGraphDocument(
   return { nodes, edges, views };
 }
 
+/**
+ * Bulk-insert a GraphDocument into one branch's live tables in FK-safe order
+ * (node → edge → node_view). jsonb params are JSON.stringify()'d + $n::jsonb cast.
+ *
+ * Caller owns the transaction: this runs on an already-BEGUN PoolClient and does
+ * NOT delete first — callers that overwrite (saveFlow, rollbackToCommit) delete
+ * in FK-safe order before calling; createBranch inserts into empty tables.
+ */
+async function insertGraph(
+  client: PoolClient,
+  branchId: string,
+  doc: GraphDocument,
+): Promise<void> {
+  // Insert nodes first (edges FK → node)
+  for (const n of doc.nodes) {
+    await client.query(
+      `INSERT INTO node (id, branch_id, type, params, credential_ref, is_draft_safe)
+       VALUES ($1, $2, $3, $4::jsonb, $5, $6)`,
+      [
+        n.id,
+        branchId,
+        n.type,
+        JSON.stringify(n.params ?? {}),
+        n.credentialRef ?? null,
+        n.isDraftSafe,
+      ],
+    );
+  }
+
+  // Insert edges (FK → node)
+  for (const e of doc.edges) {
+    await client.query(
+      `INSERT INTO edge (id, branch_id, from_node_id, to_node_id, condition)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [e.id, branchId, e.fromNodeId, e.toNodeId, e.condition ?? null],
+    );
+  }
+
+  // Insert views
+  for (const v of doc.views) {
+    await client.query(
+      `INSERT INTO node_view (branch_id, node_id, x, y, width, height, color)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [branchId, v.nodeId, v.x, v.y, v.width, v.height, v.color ?? null],
+    );
+  }
+}
+
 export async function saveFlow(
   pool: Pool,
   flowId: string,
   doc: GraphDocument,
+  branchId: string = `${flowId}-main`,
 ): Promise<void> {
-  const branchId = `${flowId}-main`;
   const c: PoolClient = await pool.connect();
   try {
     await c.query("BEGIN");
 
-    // Upsert flow + branch (idempotent on repeat saves)
-    await c.query(
-      `INSERT INTO flow (id, name, default_branch_id)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (id) DO UPDATE SET default_branch_id = EXCLUDED.default_branch_id`,
-      [flowId, "Demo Flow", branchId],
-    );
+    // Bootstrap flow + main branch (idempotent on repeat saves) ONLY for the
+    // default main branch. Non-main branches are pre-created by createBranch;
+    // saveFlow just rewrites their live tables (a write to an unknown branch
+    // FK-fails, which the route guard turns into a clean 400 first).
+    if (branchId === `${flowId}-main`) {
+      await c.query(
+        `INSERT INTO flow (id, name, default_branch_id)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (id) DO UPDATE SET default_branch_id = EXCLUDED.default_branch_id`,
+        [flowId, "Demo Flow", branchId],
+      );
 
-    await c.query(
-      `INSERT INTO branch (id, flow_id, name)
-       VALUES ($1, $2, 'main')
-       ON CONFLICT (id) DO NOTHING`,
-      [branchId, flowId],
-    );
+      await c.query(
+        `INSERT INTO branch (id, flow_id, name)
+         VALUES ($1, $2, 'main')
+         ON CONFLICT (id) DO NOTHING`,
+        [branchId, flowId],
+      );
+    }
 
     // Delete in FK-safe order: edges → node_view → node
     await c.query(`DELETE FROM edge WHERE branch_id = $1`, [branchId]);
     await c.query(`DELETE FROM node_view WHERE branch_id = $1`, [branchId]);
     await c.query(`DELETE FROM node WHERE branch_id = $1`, [branchId]);
 
-    // Insert nodes first (edges FK → node)
-    for (const n of doc.nodes) {
-      await c.query(
-        `INSERT INTO node (id, branch_id, type, params, credential_ref, is_draft_safe)
-         VALUES ($1, $2, $3, $4::jsonb, $5, $6)`,
-        [
-          n.id,
-          branchId,
-          n.type,
-          JSON.stringify(n.params ?? {}),
-          n.credentialRef ?? null,
-          n.isDraftSafe,
-        ],
-      );
-    }
-
-    // Insert edges (FK → node)
-    for (const e of doc.edges) {
-      await c.query(
-        `INSERT INTO edge (id, branch_id, from_node_id, to_node_id, condition)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [e.id, branchId, e.fromNodeId, e.toNodeId, e.condition ?? null],
-      );
-    }
-
-    // Insert views
-    for (const v of doc.views) {
-      await c.query(
-        `INSERT INTO node_view (branch_id, node_id, x, y, width, height, color)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [branchId, v.nodeId, v.x, v.y, v.width, v.height, v.color ?? null],
-      );
-    }
+    await insertGraph(c, branchId, doc);
 
     await c.query("COMMIT");
   } catch (e) {
@@ -158,15 +180,17 @@ export async function persistRun(
   commitId: string,
   snapshot: GraphDocument,
   records: RunActionRecord[],
+  branchId: string = `${flowId}-main`,
 ): Promise<void> {
-  const branchId = `${flowId}-main`;
   const c: PoolClient = await pool.connect();
   try {
     await c.query("BEGIN");
 
+    // FOR UPDATE serializes concurrent runs/commits on the same branch head (B09).
+    // flow-scoped (AND flow_id) as defense-in-depth against a cross-flow branch id.
     const b = await c.query(
-      `SELECT head_commit_id FROM branch WHERE id = $1`,
-      [branchId],
+      `SELECT head_commit_id FROM branch WHERE id = $1 AND flow_id = $2 FOR UPDATE`,
+      [branchId, flowId],
     );
     if (b.rowCount === 0) {
       throw new Error(`branch not found: ${branchId} — save the flow first`);
@@ -213,36 +237,58 @@ export async function persistRun(
 export async function loadFlow(
   pool: Pool,
   flowId: string,
+  branchId?: string,
 ): Promise<GraphDocument | null> {
-  // Resolve the branch
-  const flowRow = await pool.query(
-    `SELECT default_branch_id FROM flow WHERE id = $1`,
-    [flowId],
-  );
-  if (flowRow.rowCount === 0 || !flowRow.rows[0].default_branch_id) {
-    return null;
-  }
-  const branchId: string = flowRow.rows[0].default_branch_id;
+  // B08: read the branch resolution + all 3 live tables on a SINGLE PoolClient
+  // inside one REPEATABLE READ transaction, so the snapshot is coherent. A plain
+  // Promise.all on the pool grabs 3 connections that each re-snapshot under READ
+  // COMMITTED → a concurrent saveFlow/rollback can tear the result. The txn is
+  // read-only (plain SELECTs, no FOR UPDATE) so it cannot serialization-fail (no
+  // 40001, no retry). ROLLBACK-then-release on throw; COMMIT on success.
+  const c: PoolClient = await pool.connect();
+  try {
+    await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ");
 
-  const [nodeRes, edgeRes, viewRes] = await Promise.all([
-    pool.query(
+    // Resolve the branch (explicit branchId wins; else the flow's default)
+    let resolvedBranchId: string;
+    if (branchId) {
+      resolvedBranchId = branchId;
+    } else {
+      const flowRow = await c.query(
+        `SELECT default_branch_id FROM flow WHERE id = $1`,
+        [flowId],
+      );
+      if (flowRow.rowCount === 0 || !flowRow.rows[0].default_branch_id) {
+        await c.query("COMMIT");
+        return null;
+      }
+      resolvedBranchId = flowRow.rows[0].default_branch_id;
+    }
+
+    const nodeRes = await c.query(
       `SELECT id, type, params, credential_ref, is_draft_safe
        FROM node WHERE branch_id = $1 ORDER BY id`,
-      [branchId],
-    ),
-    pool.query(
+      [resolvedBranchId],
+    );
+    const edgeRes = await c.query(
       `SELECT id, from_node_id, to_node_id, condition
        FROM edge WHERE branch_id = $1 ORDER BY id`,
-      [branchId],
-    ),
-    pool.query(
+      [resolvedBranchId],
+    );
+    const viewRes = await c.query(
       `SELECT node_id, x, y, width, height, color
        FROM node_view WHERE branch_id = $1 ORDER BY node_id`,
-      [branchId],
-    ),
-  ]);
+      [resolvedBranchId],
+    );
 
-  return rowsToGraphDocument(nodeRes.rows, edgeRes.rows, viewRes.rows);
+    await c.query("COMMIT");
+    return rowsToGraphDocument(nodeRes.rows, edgeRes.rows, viewRes.rows);
+  } catch (e) {
+    await c.query("ROLLBACK");
+    throw e;
+  } finally {
+    c.release();
+  }
 }
 
 // ── Commit / list / rollback ───────────────────────────────────────────────
@@ -266,15 +312,16 @@ export async function commitFlow(
   flowId: string,
   commitId: string,
   authorNote: string,
+  branchId: string = `${flowId}-main`,
 ): Promise<CommitResult> {
-  const branchId = `${flowId}-main`;
   const c: PoolClient = await pool.connect();
   try {
     await c.query("BEGIN");
 
+    // flow-scoped (AND flow_id) as defense-in-depth against a cross-flow branch id.
     const branchRes = await c.query(
-      `SELECT head_commit_id FROM branch WHERE id = $1 FOR UPDATE`,
-      [branchId],
+      `SELECT head_commit_id FROM branch WHERE id = $1 AND flow_id = $2 FOR UPDATE`,
+      [branchId, flowId],
     );
     if (branchRes.rowCount === 0) {
       await c.query("ROLLBACK");
@@ -374,15 +421,16 @@ export async function rollbackToCommit(
   flowId: string,
   toCommitId: string,
   newCommitId: string,
+  branchId: string = `${flowId}-main`,
 ): Promise<{ commit: CommitMeta; doc: GraphDocument } | null> {
-  const branchId = `${flowId}-main`;
   const c: PoolClient = await pool.connect();
   try {
     await c.query("BEGIN");
 
+    // flow-scoped (AND flow_id) as defense-in-depth against a cross-flow branch id.
     const branchRes = await c.query(
-      `SELECT head_commit_id FROM branch WHERE id = $1 FOR UPDATE`,
-      [branchId],
+      `SELECT head_commit_id FROM branch WHERE id = $1 AND flow_id = $2 FOR UPDATE`,
+      [branchId, flowId],
     );
     if (branchRes.rowCount === 0) {
       await c.query("ROLLBACK");
@@ -406,39 +454,7 @@ export async function rollbackToCommit(
     await c.query(`DELETE FROM node_view WHERE branch_id = $1`, [branchId]);
     await c.query(`DELETE FROM node WHERE branch_id = $1`, [branchId]);
 
-    // Insert nodes
-    for (const n of snapshot.nodes) {
-      await c.query(
-        `INSERT INTO node (id, branch_id, type, params, credential_ref, is_draft_safe)
-         VALUES ($1, $2, $3, $4::jsonb, $5, $6)`,
-        [
-          n.id,
-          branchId,
-          n.type,
-          JSON.stringify(n.params ?? {}),
-          n.credentialRef ?? null,
-          n.isDraftSafe,
-        ],
-      );
-    }
-
-    // Insert edges
-    for (const e of snapshot.edges) {
-      await c.query(
-        `INSERT INTO edge (id, branch_id, from_node_id, to_node_id, condition)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [e.id, branchId, e.fromNodeId, e.toNodeId, e.condition ?? null],
-      );
-    }
-
-    // Insert views
-    for (const v of snapshot.views) {
-      await c.query(
-        `INSERT INTO node_view (branch_id, node_id, x, y, width, height, color)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [branchId, v.nodeId, v.x, v.y, v.width, v.height, v.color ?? null],
-      );
-    }
+    await insertGraph(c, branchId, snapshot);
 
     // Forward commit
     const authorNote = `rollback to ${toCommitId.slice(0, 8)}`;
@@ -489,4 +505,84 @@ export async function loadCommitSnapshot(
   );
   if (res.rowCount === 0) return null;
   return res.rows[0].graph_snapshot as GraphDocument;
+}
+
+// ── Branch ─────────────────────────────────────────────────────────────────
+
+/**
+ * Fork a new branch from an existing COMMIT (SPEC §2.4). One transaction:
+ *   load fromCommit's graph_snapshot (flow-scoped) → INSERT the branch row
+ *   (head + base both = fromCommitId) → bulk-insert that snapshot into the new
+ *   branch's live tables. ROLLBACK + return null if fromCommitId is unknown for
+ *   this flow (no half-fork). Caller (route) mints newBranchId via randomUUID.
+ *
+ * Precondition: forks from a committed snapshot — uncommitted live edits on the
+ * source branch are NOT carried (commit before branching; the 3b-2 FE commits
+ * first). The branch ROW is templated on db/schema.sql:13-19 + contract.Branch
+ * (NOT on saveFlow's 2-col 'main' upsert); insertGraph handles the node/edge/view copy.
+ */
+export async function createBranch(
+  pool: Pool,
+  flowId: string,
+  name: string,
+  fromCommitId: string,
+  newBranchId: string,
+): Promise<Branch | null> {
+  const c: PoolClient = await pool.connect();
+  try {
+    await c.query("BEGIN");
+
+    // Load source snapshot — flow-scoped to reject cross-flow commit ids
+    const commitRes = await c.query(
+      `SELECT graph_snapshot FROM "commit" WHERE id = $1 AND flow_id = $2`,
+      [fromCommitId, flowId],
+    );
+    if (commitRes.rowCount === 0) {
+      await c.query("ROLLBACK");
+      return null;
+    }
+    const snapshot = commitRes.rows[0].graph_snapshot as GraphDocument;
+
+    // Branch row: head + base both point at the fork commit (head_commit_id has
+    // no FK — soft pointer per schema; base_commit_id records the fork origin).
+    await c.query(
+      `INSERT INTO branch (id, flow_id, name, head_commit_id, base_commit_id)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [newBranchId, flowId, name, fromCommitId, fromCommitId],
+    );
+
+    // Copy the snapshot into the new branch's live tables (FK-safe order)
+    await insertGraph(c, newBranchId, snapshot);
+
+    await c.query("COMMIT");
+
+    return {
+      id: newBranchId,
+      flowId,
+      name,
+      headCommitId: fromCommitId,
+      baseCommitId: fromCommitId,
+    };
+  } catch (e) {
+    await c.query("ROLLBACK");
+    throw e;
+  } finally {
+    c.release();
+  }
+}
+
+/**
+ * True iff a branch with this id exists AND belongs to this flow.
+ * Used by the routes to reject a cross-flow `?branch=` with a clean 400 (B-1).
+ */
+export async function branchExists(
+  pool: Pool,
+  flowId: string,
+  branchId: string,
+): Promise<boolean> {
+  const res = await pool.query(
+    `SELECT 1 FROM branch WHERE id = $1 AND flow_id = $2`,
+    [branchId, flowId],
+  );
+  return res.rowCount !== null && res.rowCount > 0;
 }

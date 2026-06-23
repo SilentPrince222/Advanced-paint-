@@ -1,13 +1,18 @@
 import { randomUUID } from "node:crypto";
 import { getDb } from "@/lib/db";
-import { commitFlow } from "@/lib/flow-repo";
+import { commitFlow, branchExists } from "@/lib/flow-repo";
 
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  const branch = new URL(req.url).searchParams.get("branch") ?? undefined;
   try {
+    if (branch && !(await branchExists(getDb(), id, branch))) {
+      return Response.json({ error: "unknown branch" }, { status: 400 });
+    }
+
     let body: Record<string, unknown> = {};
     try {
       body = (await req.json()) as Record<string, unknown>;
@@ -27,7 +32,7 @@ export async function POST(
     }
 
     const commitId = randomUUID();
-    const r = await commitFlow(getDb(), id, commitId, authorNote);
+    const r = await commitFlow(getDb(), id, commitId, authorNote, branch);
 
     if (!r.ok && r.reason === "no-branch") {
       return Response.json({ error: "not found — save first" }, { status: 404 });

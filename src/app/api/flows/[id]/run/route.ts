@@ -1,16 +1,21 @@
 import { randomUUID } from "node:crypto";
 import { getDb } from "@/lib/db";
-import { loadFlow, persistRun, type RunActionRecord } from "@/lib/flow-repo";
+import { loadFlow, persistRun, branchExists, type RunActionRecord } from "@/lib/flow-repo";
 import { runGraph, mockResponse } from "@/lib/interpreter";
 import type { ExecLogEntry } from "@/lib/contract";
 
 export async function POST(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  const branch = new URL(req.url).searchParams.get("branch") ?? undefined;
   try {
-    const doc = await loadFlow(getDb(), id);
+    if (branch && !(await branchExists(getDb(), id, branch))) {
+      return Response.json({ error: "unknown branch" }, { status: 400 });
+    }
+
+    const doc = await loadFlow(getDb(), id, branch);
     if (!doc) {
       return Response.json(
         { error: "not found — save first" },
@@ -55,7 +60,7 @@ export async function POST(
       });
     }
 
-    await persistRun(getDb(), id, commitId, doc, records);
+    await persistRun(getDb(), id, commitId, doc, records, branch);
     return Response.json({ commitId, entries });
   } catch (e) {
     console.error("[POST /api/flows/:id/run]", e);

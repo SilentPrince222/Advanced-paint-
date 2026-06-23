@@ -1,15 +1,19 @@
 import { getDb } from "@/lib/db";
-import { loadFlow, saveFlow } from "@/lib/flow-repo";
+import { loadFlow, saveFlow, branchExists } from "@/lib/flow-repo";
 import { isNodeType, paramSchemas } from "@/lib/contract";
 import type { GraphDocument, NodeView } from "@/lib/contract";
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  const branch = new URL(req.url).searchParams.get("branch") ?? undefined;
   try {
-    const doc = await loadFlow(getDb(), id);
+    if (branch && !(await branchExists(getDb(), id, branch))) {
+      return Response.json({ error: "unknown branch" }, { status: 400 });
+    }
+    const doc = await loadFlow(getDb(), id, branch);
     if (!doc) {
       return Response.json({ error: "not found" }, { status: 404 });
     }
@@ -26,6 +30,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  const branch = new URL(req.url).searchParams.get("branch") ?? undefined;
 
   // Malformed JSON is a client error, not a 500 (B06).
   let body: GraphDocument;
@@ -146,7 +151,10 @@ export async function PUT(
   }
 
   try {
-    await saveFlow(getDb(), id, body);
+    if (branch && !(await branchExists(getDb(), id, branch))) {
+      return Response.json({ error: "unknown branch" }, { status: 400 });
+    }
+    await saveFlow(getDb(), id, body, branch);
     return Response.json({
       ok: true,
       flowId: id,

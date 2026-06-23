@@ -1,6 +1,16 @@
 import { describe, it, expect, afterAll } from "vitest";
 import { Pool } from "pg";
-import { saveFlow, loadFlow, commitFlow, listCommits, rollbackToCommit, loadCommitSnapshot } from "./flow-repo";
+import {
+  saveFlow,
+  loadFlow,
+  commitFlow,
+  listCommits,
+  rollbackToCommit,
+  loadCommitSnapshot,
+  createBranch,
+  branchExists,
+  persistRun,
+} from "./flow-repo";
 import type { GraphDocument } from "@/lib/contract";
 import { randomUUID } from "node:crypto";
 
@@ -177,5 +187,97 @@ describe.skipIf(!process.env.DATABASE_URL)("loadCommitSnapshot", () => {
 
     const snap = await loadCommitSnapshot(pool, "other-flow-rung3a", cId);
     expect(snap).toBeNull();
+  });
+});
+
+// ── Rung 3b: branch model + B09 concurrency ────────────────────────────────
+describe.skipIf(!process.env.DATABASE_URL)("createBranch + branch isolation", () => {
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  const flowId = `test-rung3b-${Date.now()}`;
+
+  afterAll(() => pool.end());
+
+  it("createBranch copies the source commit's snapshot into the new branch", async () => {
+    await saveFlow(pool, flowId, docA);
+    const cId = randomUUID();
+    const r = await commitFlow(pool, flowId, cId, "v1 amount 100");
+    expect(r.ok).toBe(true);
+
+    const newBranchId = randomUUID();
+    const branch = await createBranch(pool, flowId, "experiment", cId, newBranchId);
+    expect(branch).not.toBeNull();
+    expect(branch!.id).toBe(newBranchId);
+    expect(branch!.flowId).toBe(flowId);
+    expect(branch!.name).toBe("experiment");
+    expect(branch!.headCommitId).toBe(cId);
+    expect(branch!.baseCommitId).toBe(cId);
+
+    // The new branch's live tables equal the forked commit's snapshot
+    const onBranch = await loadFlow(pool, flowId, newBranchId);
+    expect(onBranch).toEqual(docA);
+  });
+
+  it("createBranch returns null for an unknown fromCommitId", async () => {
+    const branch = await createBranch(pool, flowId, "bogus", "no-such-commit", randomUUID());
+    expect(branch).toBeNull();
+  });
+
+  it("writing a branch does NOT touch main (branch isolation)", async () => {
+    // main starts at docA (amount 100); commit so we can fork
+    await saveFlow(pool, flowId, docA);
+    const cId = randomUUID();
+    await commitFlow(pool, flowId, cId, "base for isolation");
+
+    const branchId = randomUUID();
+    await createBranch(pool, flowId, "iso", cId, branchId);
+
+    // Edit ONLY the branch → amount 90
+    await saveFlow(pool, flowId, docB, branchId);
+
+    const onBranch = await loadFlow(pool, flowId, branchId);
+    const onMain = await loadFlow(pool, flowId); // default branch
+    const branchAmount = (onBranch!.nodes.find((n) => n.id === "n3")!.params as { amount: number }).amount;
+    const mainAmount = (onMain!.nodes.find((n) => n.id === "n3")!.params as { amount: number }).amount;
+
+    expect(branchAmount).toBe(90); // the branch edit landed
+    expect(mainAmount).toBe(100);  // main is untouched — the key proof
+  });
+
+  it("branchExists: true for own-flow branch, false for wrong-flow", async () => {
+    await saveFlow(pool, flowId, docA); // bootstraps `${flowId}-main`
+    expect(await branchExists(pool, flowId, `${flowId}-main`)).toBe(true);
+    // Same branch id, different flow → false (cross-flow guard, B-1)
+    expect(await branchExists(pool, "some-other-flow", `${flowId}-main`)).toBe(false);
+    // Unknown branch id → false
+    expect(await branchExists(pool, flowId, "no-such-branch")).toBe(false);
+  });
+});
+
+describe.skipIf(!process.env.DATABASE_URL)("B09 — sequential persistRun build a linear parent chain", () => {
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  const flowId = `test-rung3b-b09-${Date.now()}`;
+
+  afterAll(() => pool.end());
+
+  it("two SEQUENTIAL persistRun → second commit's parent is the first (no fork)", async () => {
+    await saveFlow(pool, flowId, docA);
+
+    const commit1 = randomUUID();
+    await persistRun(pool, flowId, commit1, docA, []);
+
+    const commit2 = randomUUID();
+    await persistRun(pool, flowId, commit2, docA, []);
+
+    const commits = await listCommits(pool, flowId);
+    const byId = new Map(commits.map((cm) => [cm.id, cm]));
+
+    // Both run-commits exist
+    expect(byId.has(commit1)).toBe(true);
+    expect(byId.has(commit2)).toBe(true);
+    // commit1 is the first run on a fresh branch → no parent
+    expect(byId.get(commit1)!.parentId).toBeNull();
+    // commit2 chains onto commit1 (FOR UPDATE serialized the head read) —
+    // a linear C0→A→B chain, NOT two commits both parented at null.
+    expect(byId.get(commit2)!.parentId).toBe(commit1);
   });
 });

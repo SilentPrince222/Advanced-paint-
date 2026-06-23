@@ -1,13 +1,18 @@
 import { randomUUID } from "node:crypto";
 import { getDb } from "@/lib/db";
-import { rollbackToCommit } from "@/lib/flow-repo";
+import { rollbackToCommit, branchExists } from "@/lib/flow-repo";
 
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  const branch = new URL(req.url).searchParams.get("branch") ?? undefined;
   try {
+    if (branch && !(await branchExists(getDb(), id, branch))) {
+      return Response.json({ error: "unknown branch" }, { status: 400 });
+    }
+
     let body: Record<string, unknown> = {};
     try {
       body = (await req.json()) as Record<string, unknown>;
@@ -21,7 +26,7 @@ export async function POST(
     const toCommitId = body.toCommitId;
 
     const newCommitId = randomUUID();
-    const result = await rollbackToCommit(getDb(), id, toCommitId, newCommitId);
+    const result = await rollbackToCommit(getDb(), id, toCommitId, newCommitId, branch);
 
     if (result === null) {
       return Response.json({ error: "commit not found" }, { status: 404 });
