@@ -47,7 +47,7 @@ export async function POST(
 
     return Response.json(r.commit);
   } catch (e) {
-    console.error("[POST /api/flows/:id/commit]", e);
+    console.error("[POST /api/flows/:id/commit]", e instanceof Error ? e.message : "unknown");
     return Response.json({ error: "internal server error" }, { status: 500 });
   }
 }

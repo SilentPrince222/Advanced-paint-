@@ -29,17 +29,26 @@ async function executeStripeCharge(
     return { response: { error: "no_key", mock: true }, status: "failure" };
   }
 
-  const amount =
-    typeof params.amount === "number" ? params.amount : 100;
-  const currency =
-    typeof params.currency === "string" ? params.currency : "usd";
+  if (typeof params.amount !== "number" || !Number.isInteger(params.amount) || params.amount <= 0) {
+    return { response: { error: "invalid_amount" }, status: "failure" };
+  }
+  if (typeof params.currency !== "string" || params.currency.length !== 3) {
+    return { response: { error: "invalid_currency" }, status: "failure" };
+  }
+  const amount = params.amount;
+  const currency = params.currency;
+
+  const key = process.env.STRIPE_SECRET_KEY ?? "";
+  if (key.startsWith("sk_live_")) {
+    return { response: { error: "live_key_with_test_token" }, status: "failure" };
+  }
 
   try {
     const charge = await stripe.charges.create(
       {
         amount,
         currency,
-        source: "tok_visa", // Stripe test token — always succeeds in test mode
+        source: "tok_visa",
         description: `Aurora flow execution ${idempotencyKey}`,
       },
       { idempotencyKey },
@@ -54,11 +63,11 @@ async function executeStripeCharge(
       },
       status: "success",
     };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error("[stripe-executor] charge failed:", message);
+  } catch (err: unknown) {
+    const code = (err as { code?: string }).code ?? "unknown";
+    console.error("[stripe-executor] charge failed:", code);
     return {
-      response: { error: "charge_failed" },
+      response: { error: "charge_failed", code },
       status: "failure",
     };
   }

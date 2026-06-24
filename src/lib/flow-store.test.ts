@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { useFlowStore } from "./flow-store";
-import type { Connection } from "@xyflow/react";
+import type { Connection, NodeChange } from "@xyflow/react";
 import type { FlowEdge, FlowNode, GraphDocument } from "./types";
 
 function reset() {
@@ -199,6 +199,41 @@ describe("flow-store", () => {
 
       useFlowStore.getState().bumpExecLog();
       expect(useFlowStore.getState().execLogNonce).toBe(2);
+    });
+  });
+
+  describe("removeNode — m7 selection cleanup", () => {
+    it("must emit deselect via onNodesChange before deleting so ReactFlow cannot leave stale selection", () => {
+      const { addNode, removeNode, setNodes } = useFlowStore.getState();
+      const selectedId = addNode({ type: "action.stripe.charge" });
+      addNode({ type: "trigger.webhook" });
+
+      setNodes(
+        useFlowStore.getState().nodes.map((node) =>
+          node.id === selectedId ? { ...node, selected: true } : node,
+        ),
+      );
+
+      const captured: NodeChange[] = [];
+      const originalOnNodesChange = useFlowStore.getState().onNodesChange;
+      useFlowStore.setState({
+        onNodesChange: (changes) => {
+          captured.push(...changes);
+          originalOnNodesChange(changes);
+        },
+      });
+
+      removeNode(selectedId);
+
+      expect(captured.some(
+        (change) =>
+          change.type === "select" &&
+          change.id === selectedId &&
+          change.selected === false,
+      )).toBe(true);
+      expect(captured.some(
+        (change) => change.type === "remove" && change.id === selectedId,
+      )).toBe(true);
     });
   });
 });

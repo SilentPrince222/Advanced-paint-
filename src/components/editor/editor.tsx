@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, Check, Loader2, Play, Save, Workflow, X } from "lucide-react";
 import { useFlowStore } from "@/lib/flow-store";
 import { Button } from "@/components/ui/button";
@@ -28,9 +28,13 @@ export function Editor({ flowId, onBack }: { flowId: string; onBack: () => void 
     "idle" | "loading" | "saving" | "saved" | "error"
   >("loading");
 
-  const [running, setRunning] = useState(false);
+  const running = useFlowStore((s) => s.running);
+  const setRunning = useFlowStore((s) => s.setRunning);
   const [runResult, setRunResult] = useState<RunResult | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
+  const [loadRetry, setLoadRetry] = useState(0);
+
+  const retry = useCallback(() => setLoadRetry((n) => n + 1), []);
 
   // Load on mount + on branch switch (single owner of ALL graph loading — no
   // race: VersionPanel only flips currentBranchId, Editor re-fetches). The
@@ -52,7 +56,7 @@ export function Editor({ flowId, onBack }: { flowId: string; onBack: () => void 
     return () => {
       live = false;
     };
-  }, [flowId, fromDoc, currentBranchId, resetForFlow]);
+  }, [flowId, fromDoc, currentBranchId, resetForFlow, loadRetry]);
 
   // B13: a "saved" badge must not survive an edit. Subscribe to the store and
   // clear it on any canvas mutation — the lint-blessed "setState inside a store
@@ -63,13 +67,17 @@ export function Editor({ flowId, onBack }: { flowId: string; onBack: () => void 
     });
   }, []);
 
+  const [saveError, setSaveError] = useState(false);
+
   const onSave = async () => {
     setStatus("saving");
+    setSaveError(false);
     try {
       await saveFlowToServer(flowId, toDoc(), currentBranchId);
       setStatus("saved");
     } catch {
-      setStatus("error");
+      setStatus("idle");
+      setSaveError(true);
     }
   };
 
@@ -79,7 +87,14 @@ export function Editor({ flowId, onBack }: { flowId: string; onBack: () => void 
     setRunError(null);
     try {
       await saveFlowToServer(flowId, toDoc(), currentBranchId);
-      setRunResult(await runFlow(flowId, currentBranchId));
+    } catch (e) {
+      setRunError(String(e));
+      setRunning(false);
+      return;
+    }
+    try {
+      const result = await runFlow(flowId, currentBranchId);
+      setRunResult(result);
       bumpExecLog();
     } catch (e) {
       setRunError(String(e));
@@ -146,10 +161,21 @@ export function Editor({ flowId, onBack }: { flowId: string; onBack: () => void 
                   ? "Saved"
                   : "Save"}
             </Button>
+            {saveError && (
+              <span className="text-[10px] font-medium text-destructive">Save failed</span>
+            )}
           </div>
         </header>
 
         <div className="relative min-h-0 flex-1">
+          {status === "error" && (
+            <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-center gap-2 bg-destructive/10 px-4 py-2">
+              <span className="text-xs text-destructive">Failed to load flow</span>
+              <Button size="sm" variant="outline" onClick={retry}>
+                Retry
+              </Button>
+            </div>
+          )}
           <FlowCanvas />
 
           {(runResult || runError) && (

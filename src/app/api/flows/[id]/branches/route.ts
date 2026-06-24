@@ -17,7 +17,7 @@ export async function GET(
     const branches = await listBranches(getDb(), id);
     return Response.json(branches);
   } catch (e) {
-    console.error("[GET /api/flows/:id/branches]", e);
+    console.error("[GET /api/flows/:id/branches]", e instanceof Error ? e.message : "unknown");
     return Response.json({ error: "internal server error" }, { status: 500 });
   }
 }
@@ -70,7 +70,7 @@ export async function POST(
 
     return Response.json(branch);
   } catch (e) {
-    console.error("[POST /api/flows/:id/branches]", e);
+    console.error("[POST /api/flows/:id/branches]", e instanceof Error ? e.message : "unknown");
     return Response.json({ error: "internal server error" }, { status: 500 });
   }
 }

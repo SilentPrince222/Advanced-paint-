@@ -29,6 +29,7 @@ export function VersionPanel({ flowId }: { flowId: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [diffFor, setDiffFor] = useState<CommitMeta | null>(null);
+  const [refreshFailed, setRefreshFailed] = useState(false);
 
   const refresh = async () => {
     try {
@@ -38,8 +39,9 @@ export function VersionPanel({ flowId }: { flowId: string }) {
       ]);
       setCommits(commitList);
       setBranches(branchList);
+      setRefreshFailed(false);
     } catch {
-      // non-fatal — lists stay stale
+      setRefreshFailed(true);
     }
   };
 
@@ -50,8 +52,11 @@ export function VersionPanel({ flowId }: { flowId: string }) {
         if (!live) return;
         setCommits(commitList);
         setBranches(branchList);
+        setRefreshFailed(false);
       })
-      .catch(() => { /* non-fatal */ });
+      .catch(() => {
+        if (live) setRefreshFailed(true);
+      });
     return () => { live = false; };
   }, [execLogNonce, flowId]);
 
@@ -104,8 +109,8 @@ export function VersionPanel({ flowId }: { flowId: string }) {
     try {
       const branch = await createBranch(flowId, branchName, headCommitId);
       setBranchName("");
-      await refresh();
       setCurrentBranchId(branch.id);
+      await refresh();
     } catch (e) {
       setError(String(e));
     } finally {
@@ -171,6 +176,9 @@ export function VersionPanel({ flowId }: { flowId: string }) {
       {error && (
         <p className="break-words text-[10px] text-destructive">{error}</p>
       )}
+      {refreshFailed && (
+        <p className="text-[10px] text-destructive">Refresh failed</p>
+      )}
 
       <div className="flex flex-1 flex-col gap-1 overflow-y-auto">
         {commits.length === 0 && (
@@ -191,7 +199,7 @@ export function VersionPanel({ flowId }: { flowId: string }) {
               size="sm"
               variant="outline"
               onClick={() => onRollback(c.id)}
-              disabled={busy}
+              disabled={busy || running}
             >
               Rollback
             </Button>

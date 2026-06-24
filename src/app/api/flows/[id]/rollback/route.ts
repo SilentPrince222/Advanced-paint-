@@ -35,7 +35,7 @@ export async function POST(
 
     return Response.json(result);
   } catch (e) {
-    console.error("[POST /api/flows/:id/rollback]", e);
+    console.error("[POST /api/flows/:id/rollback]", e instanceof Error ? e.message : "unknown");
     return Response.json({ error: "internal server error" }, { status: 500 });
   }
 }

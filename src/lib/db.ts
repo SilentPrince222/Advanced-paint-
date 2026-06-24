@@ -25,7 +25,9 @@ export function getDb(): Pool {
     const ca = process.env.DATABASE_CA_CERT;
     pool = new Pool({
       connectionString: url,
-      ssl: ca ? { ca, rejectUnauthorized: true } : undefined,
+      ssl: ca
+        ? { ca, rejectUnauthorized: true }
+        : { rejectUnauthorized: true },
       max: 5,
     });
   }

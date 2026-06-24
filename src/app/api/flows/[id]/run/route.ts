@@ -38,15 +38,19 @@ export async function POST(
     const mockMode =
       process.env.MOCK_MODE === "1" || process.env.MOCK_MODE === "true";
 
-    const commitId = randomUUID();
+    const normalizedBranch = branch ?? `${id}-main`;
+    const commitId = createHash("sha256")
+      .update(`run:${id}:${normalizedBranch}:${JSON.stringify(doc)}`)
+      .digest("hex")
+      .slice(0, 32);
     const now = new Date().toISOString();
     const records: RunActionRecord[] = [];
     const entries: ExecLogEntry[] = [];
 
     for (const s of actions) {
-      const normalizedBranch = branch ?? `${id}-main`;
+      const stableRequest = JSON.stringify(s.request, Object.keys(s.request).sort());
       const idempotencyKey = createHash("sha256")
-        .update(`${id}:${normalizedBranch}:${s.nodeId}:${JSON.stringify(s.request)}`)
+        .update(`${id}:${normalizedBranch}:${s.nodeId}:${stableRequest}`)
         .digest("hex")
         .slice(0, 32);
       const execId = randomUUID();
@@ -55,6 +59,7 @@ export async function POST(
 
       if (mockMode) {
         response = mockResponse(s.type, execId);
+        if ("error" in response) status = "failure";
       } else {
         const result = await executeAction(s.type, s.request, idempotencyKey);
         if (result) {
@@ -90,7 +95,7 @@ export async function POST(
     await persistRun(getDb(), id, commitId, doc, records, branch);
     return Response.json({ commitId, entries });
   } catch (e) {
-    console.error("[POST /api/flows/:id/run]", e);
+    console.error("[POST /api/flows/:id/run]", e instanceof Error ? e.message : "unknown");
     return Response.json({ error: "internal server error" }, { status: 500 });
   }
 }

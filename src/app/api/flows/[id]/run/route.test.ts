@@ -30,7 +30,7 @@ vi.mock("@/lib/interpreter", () => ({
 import { POST } from "./route";
 import { loadFlow, persistRun } from "@/lib/flow-repo";
 import { executeAction } from "@/lib/stripe-executor";
-import { mockResponse } from "@/lib/interpreter";
+import { mockResponse, runGraph } from "@/lib/interpreter";
 
 const PARAMS = { params: Promise.resolve({ id: "demo" }) };
 
@@ -49,17 +49,20 @@ const mockDoc = {
 
 const STRIPE_REQUEST = { amount: 100, currency: "usd" };
 
+/** Mirrors `route.ts` idempotency hash (commitId is NOT part of the key). */
 function stripeIdempotencyKey(
   flowId: string,
   branch: string | undefined,
   nodeId: string,
   request: Record<string, unknown>,
-  commitId?: string,
+  stable = true,
 ): string {
   const normalizedBranch = branch ?? `${flowId}-main`;
-  const base = `${flowId}:${normalizedBranch}:${nodeId}:${JSON.stringify(request)}`;
+  const requestJson = stable
+    ? JSON.stringify(request, Object.keys(request).sort())
+    : JSON.stringify(request);
   return createHash("sha256")
-    .update(commitId ? `${base}:${commitId}` : base)
+    .update(`${flowId}:${normalizedBranch}:${nodeId}:${requestJson}`)
     .digest("hex")
     .slice(0, 32);
 }
@@ -104,39 +107,34 @@ describe("POST /api/flows/[id]/run", () => {
   });
 
   it("B26 — idempotency key must not flip when branch param is omitted vs explicit main id", () => {
-    const commitId = "same-run";
     const implicit = stripeIdempotencyKey(
       "demo",
       undefined,
       "n-stripe",
       STRIPE_REQUEST,
-      commitId,
     );
     const explicit = stripeIdempotencyKey(
       "demo",
       "demo-main",
       "n-stripe",
       STRIPE_REQUEST,
-      commitId,
     );
 
     expect(implicit).toBe(explicit);
   });
 
-  it("B27 — distinct runs must not reuse the same Stripe idempotency key", () => {
+  it("B27 — distinct charge amounts must not reuse the same Stripe idempotency key", () => {
     const runA = stripeIdempotencyKey(
       "demo",
       undefined,
       "n-stripe",
-      STRIPE_REQUEST,
-      "commit-a",
+      { amount: 100, currency: "usd" },
     );
     const runB = stripeIdempotencyKey(
       "demo",
       undefined,
       "n-stripe",
-      STRIPE_REQUEST,
-      "commit-b",
+      { amount: 200, currency: "usd" },
     );
 
     expect(runA).not.toBe(runB);
@@ -169,5 +167,120 @@ describe("POST /api/flows/[id]/run", () => {
     expect(execIds[0]).toBeDefined();
     expect(execIds[1]).toBeDefined();
     expect(execIds[0]).not.toBe(execIds[1]);
+  });
+
+  it("M1 — idempotency hash must be stable regardless of request key order", () => {
+    const insertionOrder = { amount: 100, currency: "usd" };
+    const reversed = { currency: "usd", amount: 100 };
+
+    const stableA = stripeIdempotencyKey(
+      "demo",
+      undefined,
+      "n-stripe",
+      insertionOrder,
+      true,
+    );
+    const stableB = stripeIdempotencyKey(
+      "demo",
+      undefined,
+      "n-stripe",
+      reversed,
+      true,
+    );
+
+    expect(stableA).toBe(stableB);
+
+    const unstableA = stripeIdempotencyKey(
+      "demo",
+      undefined,
+      "n-stripe",
+      insertionOrder,
+      false,
+    );
+    const unstableB = stripeIdempotencyKey(
+      "demo",
+      undefined,
+      "n-stripe",
+      reversed,
+      false,
+    );
+
+    expect(unstableA).not.toBe(unstableB);
+  });
+
+  it("M1 — POST /run uses stable idempotency keys for reordered request objects", async () => {
+    vi.mocked(runGraph)
+      .mockReturnValueOnce({
+        startNodeId: "n-stripe",
+        steps: [
+          {
+            kind: "action",
+            nodeId: "n-stripe",
+            type: "action.stripe.charge",
+            request: { amount: 100, currency: "usd" },
+          },
+        ],
+      })
+      .mockReturnValueOnce({
+        startNodeId: "n-stripe",
+        steps: [
+          {
+            kind: "action",
+            nodeId: "n-stripe",
+            type: "action.stripe.charge",
+            request: { currency: "usd", amount: 100 },
+          },
+        ],
+      });
+
+    await POST(runReq(), PARAMS);
+    await POST(runReq(), PARAMS);
+
+    const keys = vi.mocked(executeAction).mock.calls.map((c) => c[2]);
+    expect(keys[0]).toBe(keys[1]);
+  });
+
+  it("M2 — mock mode must record failure status when mock response simulates decline", async () => {
+    process.env.MOCK_MODE = "1";
+    vi.mocked(mockResponse).mockReturnValue({
+      error: "mock_declined",
+      mock: true,
+    });
+
+    const res = await POST(runReq(), PARAMS);
+    expect(res.status).toBe(200);
+
+    const body = (await res.json()) as {
+      entries: Array<{ status: string; response: Record<string, unknown> }>;
+    };
+    expect(body.entries[0]?.status).toBe("failure");
+    expect(body.entries[0]?.response).toEqual(
+      expect.objectContaining({ error: "mock_declined", mock: true }),
+    );
+    expect(vi.mocked(executeAction)).not.toHaveBeenCalled();
+  });
+
+  it("M4 — persistRun failure after Stripe charge must reuse commitId and idempotency key on retry", async () => {
+    vi.mocked(persistRun)
+      .mockRejectedValueOnce(new Error("db write failed"))
+      .mockResolvedValueOnce(undefined);
+
+    const res1 = await POST(runReq(), PARAMS);
+    expect(res1.status).toBe(500);
+    expect(vi.mocked(executeAction)).toHaveBeenCalledTimes(1);
+
+    const res2 = await POST(runReq(), PARAMS);
+    expect(res2.status).toBe(200);
+    expect(vi.mocked(executeAction)).toHaveBeenCalledTimes(2);
+
+    const keys = vi.mocked(executeAction).mock.calls.map((c) => c[2]);
+    expect(keys[0]).toBe(keys[1]);
+
+    const commitIds = vi.mocked(persistRun).mock.calls.map((c) => c[2]);
+    expect(commitIds).toHaveLength(2);
+    expect(commitIds[0]).toBe(commitIds[1]);
+
+    const body = (await res2.json()) as { commitId: string };
+    expect(body.commitId).toBe(commitIds[1]);
   });
 });

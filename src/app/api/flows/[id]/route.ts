@@ -22,8 +22,7 @@ export async function GET(
     }
     return Response.json(doc);
   } catch (e) {
-    // Log the real error server-side; never leak pg/internal detail to the client (B07).
-    console.error("[GET /api/flows/:id]", e);
+    console.error("[GET /api/flows/:id]", e instanceof Error ? e.message : "unknown");
     return Response.json({ error: "internal server error" }, { status: 500 });
   }
 }
@@ -170,7 +169,7 @@ export async function PUT(
       },
     });
   } catch (e) {
-    console.error("[PUT /api/flows/:id]", e);
+    console.error("[PUT /api/flows/:id]", e instanceof Error ? e.message : "unknown");
     return Response.json({ error: "internal server error" }, { status: 500 });
   }
 }

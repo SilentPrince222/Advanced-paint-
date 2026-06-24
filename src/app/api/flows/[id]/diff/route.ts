@@ -28,7 +28,7 @@ export async function GET(
 
     return Response.json(diffGraph(fromSnap, toSnap));
   } catch (e) {
-    console.error("[GET /api/flows/:id/diff]", e);
+    console.error("[GET /api/flows/:id/diff]", e instanceof Error ? e.message : "unknown");
     return Response.json({ error: "internal server error" }, { status: 500 });
   }
 }

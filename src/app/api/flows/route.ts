@@ -22,7 +22,7 @@ export async function GET() {
     }));
     return Response.json(flows);
   } catch (e) {
-    console.error("[GET /api/flows]", e);
+    console.error("[GET /api/flows]", e instanceof Error ? e.message : "unknown");
     return Response.json({ error: "internal server error" }, { status: 500 });
   }
 }
@@ -64,7 +64,7 @@ export async function POST(req: Request) {
       { status: 201 },
     );
   } catch (e) {
-    console.error("[POST /api/flows]", e);
+    console.error("[POST /api/flows]", e instanceof Error ? e.message : "unknown");
     return Response.json({ error: "internal server error" }, { status: 500 });
   }
 }

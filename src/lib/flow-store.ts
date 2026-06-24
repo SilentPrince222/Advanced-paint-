@@ -128,8 +128,14 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   },
 
   removeNode: (id) => {
+    const node = get().nodes.find((n) => n.id === id);
+    const changes: NodeChange<FlowNode>[] = [];
+    if (node?.selected) {
+      changes.push({ type: "select", id, selected: false });
+    }
+    changes.push({ type: "remove", id });
+    get().onNodesChange(changes);
     set({
-      nodes: get().nodes.filter((node) => node.id !== id),
       edges: get().edges.filter(
         (edge) => edge.source !== id && edge.target !== id,
       ),
