@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
+    "db:migrate": "tsx --env-file=.env scripts/migrate.ts",
     "db:init": "tsx --env-file=.env scripts/init-db.ts",
     "verify:db": "tsx --env-file=.env scripts/verify-db.ts",
     "verify:immutability": "tsx --env-file=.env scripts/verify-immutability.ts",
