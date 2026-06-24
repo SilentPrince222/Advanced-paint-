@@ -1,5 +1,7 @@
 export function formatRelativeDate(iso: string): string {
   const date = new Date(iso);
+  if (isNaN(date.getTime())) return "—";
+
   const now = new Date();
 
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -8,7 +10,7 @@ export function formatRelativeDate(iso: string): string {
     (startOfToday.getTime() - startOfDate.getTime()) / 86_400_000,
   );
 
-  if (diffDays === 0) {
+  if (diffDays <= 0) {
     return `Today at ${date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`;
   }
   if (diffDays === 1) {
