@@ -72,6 +72,8 @@ export interface FlowState {
   /** true while a run or save is in flight (gates mutating buttons globally) */
   running: boolean;
   setRunning: (v: boolean) => void;
+  /** Wipe canvas state for a fresh flow load. Called by Editor on flowId change. */
+  resetForFlow: () => void;
 }
 
 export const useFlowStore = create<FlowState>((set, get) => ({
@@ -180,6 +182,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
 
   running: false,
   setRunning: (v) => set({ running: v }),
+  resetForFlow: () => set({ nodes: [], edges: [], currentBranchId: undefined, execLogNonce: 0, running: false }),
 }));
 
 // Re-export for callers that derive UI purely from a node's `type`.

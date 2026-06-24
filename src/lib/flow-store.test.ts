@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { useFlowStore } from "./flow-store";
 import type { Connection } from "@xyflow/react";
-import type { GraphDocument } from "./types";
+import type { FlowEdge, FlowNode, GraphDocument } from "./types";
 
 function reset() {
   useFlowStore.setState({ nodes: [], edges: [] });
@@ -200,5 +200,29 @@ describe("flow-store", () => {
       useFlowStore.getState().bumpExecLog();
       expect(useFlowStore.getState().execLogNonce).toBe(2);
     });
+  });
+});
+
+describe("resetForFlow", () => {
+  it("clears nodes, edges, currentBranchId, resets execLogNonce and running", () => {
+    // Pollute the store
+    useFlowStore.setState({
+      nodes: [
+        { id: "n1", type: "base", position: { x: 0, y: 0 }, data: {} },
+      ] as unknown as FlowNode[],
+      edges: [{ id: "e1", source: "n1", target: "n2" }] as unknown as FlowEdge[],
+      currentBranchId: "some-branch",
+      execLogNonce: 5,
+      running: true,
+    });
+
+    useFlowStore.getState().resetForFlow();
+
+    const after = useFlowStore.getState();
+    expect(after.nodes).toEqual([]);
+    expect(after.edges).toEqual([]);
+    expect(after.currentBranchId).toBeUndefined();
+    expect(after.execLogNonce).toBe(0);
+    expect(after.running).toBe(false);
   });
 });
