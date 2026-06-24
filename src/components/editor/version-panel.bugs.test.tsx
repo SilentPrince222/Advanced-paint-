@@ -3,7 +3,6 @@ import { render, screen, waitFor, act } from "@testing-library/react";
 import { useFlowStore } from "@/lib/flow-store";
 
 vi.mock("@/lib/flow-client", () => ({
-  DEMO_FLOW_ID: "demo",
   saveFlowToServer: vi.fn().mockResolvedValue(undefined),
   commitFlow: vi.fn(),
   listCommits: vi.fn(),
@@ -48,14 +47,14 @@ describe("VersionPanel bug regressions", () => {
   it("B32 — Commit must stay disabled while a run is in flight", async () => {
     useFlowStore.setState({ running: true } as never);
 
-    render(<VersionPanel />);
+    render(<VersionPanel flowId="demo" />);
 
     const commitBtn = await screen.findByRole("button", { name: /commit/i });
     expect(commitBtn).toBeDisabled();
   });
 
   it("B33 — bumpExecLog must refetch commits and branches for the version panel", async () => {
-    const { rerender } = render(<VersionPanel />);
+    const { rerender } = render(<VersionPanel flowId="demo" />);
 
     await waitFor(() => {
       expect(vi.mocked(listCommits)).toHaveBeenCalledTimes(1);
@@ -66,7 +65,7 @@ describe("VersionPanel bug regressions", () => {
     });
 
     // Re-render so a subscribed nonce would trigger a refetch.
-    rerender(<VersionPanel />);
+    rerender(<VersionPanel flowId="demo" />);
 
     await waitFor(() => {
       expect(vi.mocked(listCommits)).toHaveBeenCalledTimes(2);

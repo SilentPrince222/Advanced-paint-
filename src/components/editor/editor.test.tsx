@@ -9,7 +9,6 @@ vi.mock("./side-panel", () => ({
   SidePanel: () => <div data-testid="side-panel-stub" />,
 }));
 vi.mock("@/lib/flow-client", () => ({
-  DEMO_FLOW_ID: "demo",
   fetchFlow: vi.fn().mockResolvedValue(null),
   saveFlowToServer: vi.fn().mockResolvedValue(undefined),
   runFlow: vi.fn(),
@@ -34,7 +33,7 @@ beforeEach(async () => {
 });
 
 it("B13 — Save status stuck 'saved': after an edit the button must revert to 'Save' (dirty)", async () => {
-  render(<Editor />);
+  render(<Editor flowId="test-flow" onBack={vi.fn()} />);
   await waitFor(() => expect(screen.getByRole("button", { name: "Save" })).toBeEnabled(), { timeout: 5000 });
 
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -58,7 +57,7 @@ it("B12 — Save NOT disabled while a run is in flight: Save must be disabled du
     new Promise((r) => { release = r; }),
   );
 
-  render(<Editor />);
+  render(<Editor flowId="test-flow" onBack={vi.fn()} />);
   await waitFor(() => expect(screen.getByRole("button", { name: "Run" })).toBeEnabled(), { timeout: 5000 });
 
   fireEvent.click(screen.getByRole("button", { name: "Run" }));
@@ -72,7 +71,7 @@ it("B12 — Save NOT disabled while a run is in flight: Save must be disabled du
 }, 15000);
 
 it("renders side-panel stub (wiring)", async () => {
-  render(<Editor />);
+  render(<Editor flowId="test-flow" onBack={vi.fn()} />);
   await waitFor(
     () => expect(screen.getByTestId("side-panel-stub")).toBeInTheDocument(),
     { timeout: 5000 },

@@ -1,7 +1,5 @@
 import type { Branch, CommitMeta, ExecLogEntry, GraphDocument, GraphDiff } from "@/lib/contract";
 
-export const DEMO_FLOW_ID = "demo";
-
 /**
  * Build the trailing `?branch=` query segment. Empty string when `branch` is
  * falsy (undefined ≡ main), matching the repo's default-param semantics. Used by
@@ -201,4 +199,30 @@ export async function createBranch(
     throw new Error(`createBranch failed: ${res.status} ${text}`);
   }
   return res.json() as Promise<Branch>;
+}
+
+export interface FlowSummary {
+  id: string;
+  name: string;
+  updatedAt: string;
+  nodeCount: number;
+}
+
+export async function listFlows(): Promise<FlowSummary[]> {
+  const res = await fetch("/api/flows");
+  if (!res.ok) throw new Error(`listFlows failed: ${res.status}`);
+  return res.json() as Promise<FlowSummary[]>;
+}
+
+export async function createNewFlow(name: string): Promise<FlowSummary> {
+  const res = await fetch("/api/flows", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText);
+    throw new Error(`createFlow failed: ${res.status} ${text}`);
+  }
+  return res.json() as Promise<FlowSummary>;
 }

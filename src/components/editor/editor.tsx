@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Loader2, Play, Save, Workflow, X } from "lucide-react";
+import { ArrowLeft, Check, Loader2, Play, Save, Workflow, X } from "lucide-react";
 import { useFlowStore } from "@/lib/flow-store";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,20 +9,20 @@ import {
   saveFlowToServer,
   runFlow,
   type RunResult,
-  DEMO_FLOW_ID,
 } from "@/lib/flow-client";
 import { NodePalette } from "./node-palette";
 import { FlowCanvas } from "./flow-canvas";
 import { SidePanel } from "./side-panel";
 import { VersionPanel } from "./version-panel";
 
-export function Editor() {
+export function Editor({ flowId, onBack }: { flowId: string; onBack: () => void }) {
   const nodeCount = useFlowStore((state) => state.nodes.length);
   const edgeCount = useFlowStore((state) => state.edges.length);
   const toDoc = useFlowStore((s) => s.toGraphDocument);
   const fromDoc = useFlowStore((s) => s.fromGraphDocument);
   const currentBranchId = useFlowStore((s) => s.currentBranchId);
   const bumpExecLog = useFlowStore((s) => s.bumpExecLog);
+  const resetForFlow = useFlowStore((s) => s.resetForFlow);
 
   const [status, setStatus] = useState<
     "idle" | "loading" | "saving" | "saved" | "error"
@@ -38,10 +38,11 @@ export function Editor() {
   // body) to avoid the set-state-in-effect cascade.
   useEffect(() => {
     let live = true;
+    resetForFlow();
     (async () => {
       if (live) setStatus("loading");
       try {
-        const d = await fetchFlow(DEMO_FLOW_ID, currentBranchId);
+        const d = await fetchFlow(flowId, currentBranchId);
         if (live && d) fromDoc(d);
         if (live) setStatus("idle");
       } catch {
@@ -51,7 +52,7 @@ export function Editor() {
     return () => {
       live = false;
     };
-  }, [fromDoc, currentBranchId]);
+  }, [flowId, fromDoc, currentBranchId, resetForFlow]);
 
   // B13: a "saved" badge must not survive an edit. Subscribe to the store and
   // clear it on any canvas mutation — the lint-blessed "setState inside a store
@@ -65,7 +66,7 @@ export function Editor() {
   const onSave = async () => {
     setStatus("saving");
     try {
-      await saveFlowToServer(DEMO_FLOW_ID, toDoc(), currentBranchId);
+      await saveFlowToServer(flowId, toDoc(), currentBranchId);
       setStatus("saved");
     } catch {
       setStatus("error");
@@ -77,8 +78,8 @@ export function Editor() {
     setRunResult(null);
     setRunError(null);
     try {
-      await saveFlowToServer(DEMO_FLOW_ID, toDoc(), currentBranchId);
-      setRunResult(await runFlow(DEMO_FLOW_ID, currentBranchId));
+      await saveFlowToServer(flowId, toDoc(), currentBranchId);
+      setRunResult(await runFlow(flowId, currentBranchId));
       bumpExecLog();
     } catch (e) {
       setRunError(String(e));
@@ -94,6 +95,11 @@ export function Editor() {
       <div className="relative flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between gap-3 border-b border-border bg-background/80 px-4 py-2.5 backdrop-blur">
           <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={onBack} className="gap-1">
+              <ArrowLeft className="h-3.5 w-3.5" />
+              My Flows
+            </Button>
+            <div className="h-4 border-l border-border" />
             <Workflow className="h-4 w-4 text-primary" />
             <h1 className="text-sm font-semibold tracking-tight">
               Visual Automation Builder
@@ -216,7 +222,7 @@ export function Editor() {
 
       <SidePanel />
 
-      <VersionPanel />
+      <VersionPanel flowId={flowId} />
     </div>
   );
 }

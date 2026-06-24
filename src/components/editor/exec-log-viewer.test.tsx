@@ -5,7 +5,6 @@ import { listExecLog } from "@/lib/flow-client";
 import type { ExecLogEntry } from "@/lib/contract";
 
 vi.mock("@/lib/flow-client", () => ({
-  DEMO_FLOW_ID: "demo",
   listExecLog: vi.fn(),
 }));
 
@@ -49,7 +48,7 @@ describe("ExecLogViewer", () => {
   });
 
   it("renders rows from mocked listExecLog", async () => {
-    render(<ExecLogViewer />);
+    render(<ExecLogViewer flowId="demo" />);
 
     await waitFor(() => {
       expect(screen.getByText("action.stripe.charge")).toBeTruthy();
@@ -58,7 +57,7 @@ describe("ExecLogViewer", () => {
   });
 
   it("renders [MOCK] badge when response.mock is true", async () => {
-    render(<ExecLogViewer />);
+    render(<ExecLogViewer flowId="demo" />);
 
     await waitFor(() => {
       expect(screen.getAllByText("MOCK")).toHaveLength(2);
@@ -66,7 +65,7 @@ describe("ExecLogViewer", () => {
   });
 
   it("renders badge with trigger-enforced append-only text", async () => {
-    render(<ExecLogViewer />);
+    render(<ExecLogViewer flowId="demo" />);
 
     await waitFor(() => {
       expect(
@@ -77,7 +76,7 @@ describe("ExecLogViewer", () => {
 
   it("renders empty state when no executions", async () => {
     vi.mocked(listExecLog).mockResolvedValueOnce([]);
-    render(<ExecLogViewer />);
+    render(<ExecLogViewer flowId="demo" />);
 
     await waitFor(() => {
       expect(screen.getByText(/No executions yet/i)).toBeTruthy();
@@ -86,7 +85,7 @@ describe("ExecLogViewer", () => {
 
   it("renders error state on fetch failure", async () => {
     vi.mocked(listExecLog).mockRejectedValueOnce(new Error("fetch failed"));
-    render(<ExecLogViewer />);
+    render(<ExecLogViewer flowId="demo" />);
 
     await waitFor(() => {
       expect(screen.getByText(/fetch failed/i)).toBeTruthy();
@@ -94,13 +93,13 @@ describe("ExecLogViewer", () => {
   });
 
   it("re-fetches when execLogNonce changes", async () => {
-    const { rerender } = render(<ExecLogViewer />);
+    const { rerender } = render(<ExecLogViewer flowId="demo" />);
     await waitFor(() => {
       expect(vi.mocked(listExecLog)).toHaveBeenCalledTimes(1);
     });
 
     storeState.execLogNonce = 1;
-    rerender(<ExecLogViewer />);
+    rerender(<ExecLogViewer flowId="demo" />);
 
     await waitFor(() => {
       expect(vi.mocked(listExecLog)).toHaveBeenCalledTimes(2);

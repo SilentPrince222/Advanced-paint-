@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:migrate": "tsx --env-file=.env scripts/migrate.ts",
+    "db:seed": "tsx --env-file=.env scripts/seed-flows.ts",
     "db:init": "tsx --env-file=.env scripts/init-db.ts",
     "verify:db": "tsx --env-file=.env scripts/verify-db.ts",
     "verify:immutability": "tsx --env-file=.env scripts/verify-immutability.ts",

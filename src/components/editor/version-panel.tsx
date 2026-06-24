@@ -10,13 +10,12 @@ import {
   listCommits,
   rollbackFlow,
   saveFlowToServer,
-  DEMO_FLOW_ID,
 } from "@/lib/flow-client";
 import type { Branch, CommitMeta } from "@/lib/contract";
 import { DiffView } from "@/components/editor/diff-view";
 import { ExecLogViewer } from "@/components/editor/exec-log-viewer";
 
-export function VersionPanel() {
+export function VersionPanel({ flowId }: { flowId: string }) {
   const currentBranchId = useFlowStore((s) => s.currentBranchId);
   const setCurrentBranchId = useFlowStore((s) => s.setCurrentBranchId);
   const bumpExecLog = useFlowStore((s) => s.bumpExecLog);
@@ -34,8 +33,8 @@ export function VersionPanel() {
   const refresh = async () => {
     try {
       const [commitList, branchList] = await Promise.all([
-        listCommits(DEMO_FLOW_ID),
-        listBranches(DEMO_FLOW_ID),
+        listCommits(flowId),
+        listBranches(flowId),
       ]);
       setCommits(commitList);
       setBranches(branchList);
@@ -46,7 +45,7 @@ export function VersionPanel() {
 
   useEffect(() => {
     let live = true;
-    Promise.all([listCommits(DEMO_FLOW_ID), listBranches(DEMO_FLOW_ID)])
+    Promise.all([listCommits(flowId), listBranches(flowId)])
       .then(([commitList, branchList]) => {
         if (!live) return;
         setCommits(commitList);
@@ -54,14 +53,14 @@ export function VersionPanel() {
       })
       .catch(() => { /* non-fatal */ });
     return () => { live = false; };
-  }, [execLogNonce]);
+  }, [execLogNonce, flowId]);
 
   // Fork source = the ACTIVE branch's head commit (BLOCKER 1 fix). commits[0]
   // is flow-scoped (wrong-graph risk); headCommitId is per-branch correct.
   // currentBranchId undefined ≡ main (store/store-route semantics), so resolve
   // the effective id the same way the selector's `value` does before the lookup.
   const mainBranch =
-    branches.find((b) => b.name === "main" && b.id === `${DEMO_FLOW_ID}-main`) ??
+    branches.find((b) => b.name === "main" && b.id === `${flowId}-main`) ??
     branches.find((b) => b.name === "main");
   const effectiveBranchId = currentBranchId ?? mainBranch?.id;
   const headCommitId =
@@ -72,8 +71,8 @@ export function VersionPanel() {
     setError(null);
     try {
       const doc = useFlowStore.getState().toGraphDocument();
-      await saveFlowToServer(DEMO_FLOW_ID, doc, currentBranchId);
-      await commitFlow(DEMO_FLOW_ID, note, currentBranchId);
+      await saveFlowToServer(flowId, doc, currentBranchId);
+      await commitFlow(flowId, note, currentBranchId);
       setNote("");
       await refresh();
     } catch (e) {
@@ -87,7 +86,7 @@ export function VersionPanel() {
     setBusy(true);
     setError(null);
     try {
-      const res = await rollbackFlow(DEMO_FLOW_ID, commitId, currentBranchId);
+      const res = await rollbackFlow(flowId, commitId, currentBranchId);
       useFlowStore.getState().fromGraphDocument(res.doc);
       await refresh();
       bumpExecLog();
@@ -103,7 +102,7 @@ export function VersionPanel() {
     setBusy(true);
     setError(null);
     try {
-      const branch = await createBranch(DEMO_FLOW_ID, branchName, headCommitId);
+      const branch = await createBranch(flowId, branchName, headCommitId);
       setBranchName("");
       await refresh();
       setCurrentBranchId(branch.id);
@@ -214,7 +213,7 @@ export function VersionPanel() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-lg">
             <DiffView
-              flowId={DEMO_FLOW_ID}
+              flowId={flowId}
               from={diffFor.parentId!}
               to={diffFor.id}
               onClose={() => setDiffFor(null)}
@@ -223,7 +222,7 @@ export function VersionPanel() {
         </div>
       )}
 
-      <ExecLogViewer />
+      <ExecLogViewer flowId={flowId} />
     </aside>
   );
 }

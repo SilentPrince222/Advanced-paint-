@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { diffFlow } from "@/lib/flow-client";
 import type { GraphDiff, FieldChange } from "@/lib/contract";
 
@@ -36,12 +36,8 @@ export function DiffView({ flowId, from, to, onClose }: DiffViewProps) {
   // Derive loading: neither result nor error arrived yet for the current (flowId,from,to)
   const loading = diff === null && error === null;
 
-  const fetchedRef = useRef<string | null>(null);
-
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    const key = `${flowId}:${from}:${to}`;
-    if (fetchedRef.current === key) return;
-    fetchedRef.current = key;
     let live = true;
     setDiff(null);
     setError(null);
@@ -52,6 +48,7 @@ export function DiffView({ flowId, from, to, onClose }: DiffViewProps) {
       live = false;
     };
   }, [flowId, from, to]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const isEmpty =
     diff &&

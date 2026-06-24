@@ -3,7 +3,6 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 
 // vi.mock calls BEFORE imports of the module under test
 vi.mock("@/lib/flow-client", () => ({
-  DEMO_FLOW_ID: "demo",
   saveFlowToServer: vi.fn().mockResolvedValue(undefined),
   commitFlow: vi.fn(),
   listCommits: vi.fn(),
@@ -108,7 +107,7 @@ describe("VersionPanel", () => {
   });
 
   it("renders Commit button and input", async () => {
-    render(<VersionPanel />);
+    render(<VersionPanel flowId="demo" />);
     expect(screen.getByRole("button", { name: /commit/i })).toBeTruthy();
     expect(screen.getByPlaceholderText(/commit note/i)).toBeTruthy();
   });
@@ -117,7 +116,7 @@ describe("VersionPanel", () => {
     vi.mocked(commitFlow).mockResolvedValue(mockCommitMeta);
     vi.mocked(listCommits).mockResolvedValue([mockCommitMeta]);
 
-    render(<VersionPanel />);
+    render(<VersionPanel flowId="demo" />);
 
     const input = screen.getByPlaceholderText(/commit note/i);
     fireEvent.change(input, { target: { value: "v1" } });
@@ -139,7 +138,7 @@ describe("VersionPanel", () => {
     vi.mocked(listCommits).mockResolvedValue([mockCommitMeta]);
     vi.mocked(rollbackFlow).mockResolvedValue({ commit: mockCommitMeta, doc: mockDoc });
 
-    render(<VersionPanel />);
+    render(<VersionPanel flowId="demo" />);
 
     // Wait for the commit list to load
     await waitFor(() => {
@@ -162,7 +161,7 @@ describe("VersionPanel", () => {
   it("Diff button is disabled when parentId is null", async () => {
     vi.mocked(listCommits).mockResolvedValue([mockCommitMeta]); // parentId: null
 
-    render(<VersionPanel />);
+    render(<VersionPanel flowId="demo" />);
 
     await waitFor(() => {
       expect(screen.getByText("v1")).toBeTruthy();
@@ -175,7 +174,7 @@ describe("VersionPanel", () => {
   it("Diff button enabled when parentId non-null; click shows DiffView overlay", async () => {
     vi.mocked(listCommits).mockResolvedValue([mockCommitWithParent]);
 
-    render(<VersionPanel />);
+    render(<VersionPanel flowId="demo" />);
 
     await waitFor(() => {
       expect(screen.getByText("v2")).toBeTruthy();
@@ -194,7 +193,7 @@ describe("VersionPanel", () => {
   it("selector renders the main option from listBranches and is enabled once loaded", async () => {
     vi.mocked(listBranches).mockResolvedValue([mockMainBranch]);
 
-    render(<VersionPanel />);
+    render(<VersionPanel flowId="demo" />);
 
     const select = await screen.findByRole("combobox");
     await waitFor(() => {
@@ -214,7 +213,7 @@ describe("VersionPanel", () => {
     };
     vi.mocked(listBranches).mockResolvedValue([mockMainBranch, experimentBranch]);
 
-    render(<VersionPanel />);
+    render(<VersionPanel flowId="demo" />);
 
     const select = await screen.findByRole("combobox");
     await waitFor(() => {
@@ -243,7 +242,7 @@ describe("VersionPanel", () => {
     };
     vi.mocked(createBranch).mockResolvedValue(created);
 
-    render(<VersionPanel />);
+    render(<VersionPanel flowId="demo" />);
 
     const nameInput = await screen.findByPlaceholderText(/branch name/i);
     fireEvent.change(nameInput, { target: { value: "experiment" } });
@@ -279,7 +278,7 @@ describe("VersionPanel", () => {
     };
     vi.mocked(listBranches).mockResolvedValue([rogueMain, canonicalMain]);
 
-    render(<VersionPanel />);
+    render(<VersionPanel flowId="demo" />);
 
     const select = await screen.findByRole("combobox");
     await waitFor(() => {
@@ -293,7 +292,7 @@ describe("VersionPanel", () => {
     vi.mocked(listCommits).mockResolvedValue([mockCommitMeta]);
     vi.mocked(listBranches).mockResolvedValue([headlessMain]);
 
-    render(<VersionPanel />);
+    render(<VersionPanel flowId="demo" />);
 
     const nameInput = await screen.findByPlaceholderText(/branch name/i);
     fireEvent.change(nameInput, { target: { value: "experiment" } });

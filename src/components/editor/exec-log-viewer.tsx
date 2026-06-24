@@ -3,10 +3,10 @@
 import { useEffect, useState } from "react";
 import { Lock, AlertCircle } from "lucide-react";
 import { useFlowStore } from "@/lib/flow-store";
-import { listExecLog, DEMO_FLOW_ID } from "@/lib/flow-client";
+import { listExecLog } from "@/lib/flow-client";
 import type { ExecLogEntry } from "@/lib/contract";
 
-export function ExecLogViewer() {
+export function ExecLogViewer({ flowId }: { flowId: string }) {
   const execLogNonce = useFlowStore((s) => s.execLogNonce);
   const [entries, setEntries] = useState<ExecLogEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -14,7 +14,7 @@ export function ExecLogViewer() {
 
   useEffect(() => {
     let live = true;
-    listExecLog(DEMO_FLOW_ID)
+    listExecLog(flowId)
       .then((e) => {
         if (live) {
           setEntries(e);
@@ -29,7 +29,7 @@ export function ExecLogViewer() {
     };
     // persistRun COMMIT completes before run/route.ts writes the response,
     // so the post-bumpExecLog re-fetch is guaranteed to see committed rows (no race).
-  }, [execLogNonce]);
+  }, [execLogNonce, flowId]);
 
   if (collapsed) {
     return (

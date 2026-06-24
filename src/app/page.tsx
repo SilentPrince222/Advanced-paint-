@@ -1,12 +1,28 @@
-import type { Metadata } from "next";
+"use client";
+
+import { useState } from "react";
+import { Dashboard } from "@/components/dashboard/dashboard";
 import { Editor } from "@/components/editor/editor";
 
-export const metadata: Metadata = {
-  title: "Visual Automation Builder — H0 Hackathon",
-  description:
-    "Design, version, and execute automation workflows on an infinite canvas. Built for the H0 Hackathon.",
-};
+type Screen =
+  | { view: "dashboard" }
+  | { view: "editor"; flowId: string };
 
 export default function Home() {
-  return <Editor />;
+  const [screen, setScreen] = useState<Screen>({ view: "dashboard" });
+
+  if (screen.view === "editor") {
+    return (
+      <Editor
+        flowId={screen.flowId}
+        onBack={() => setScreen({ view: "dashboard" })}
+      />
+    );
+  }
+
+  return (
+    <Dashboard
+      onSelectFlow={(id) => setScreen({ view: "editor", flowId: id })}
+    />
+  );
 }
