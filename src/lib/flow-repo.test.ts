@@ -1,5 +1,5 @@
-import { describe, it, expect, afterAll, vi } from "vitest";
-import { Pool } from "pg";
+import { describe, it, expect, afterAll, vi, beforeEach } from "vitest";
+import { Pool, type PoolClient } from "pg";
 import {
   saveFlow,
   loadFlow,
@@ -457,5 +457,42 @@ describe("B30 — ROLLBACK failure must not mask the original error", () => {
         },
       ]),
     ).rejects.toThrow("duplicate key value violates unique constraint");
+  });
+});
+
+// Mock client for bootstrapFlow unit test. vi.mock("pg") intentionally omitted:
+// describe.skipIf still runs this factory at registration, so `new Pool(...)` at
+// top of the DB-gated suites would hit a non-constructor mock and fail file load.
+// flow-repo has type-only pg imports, so passing mockClient directly is enough.
+const mockQuery = vi.fn().mockResolvedValue({ rows: [], rowCount: 0 });
+const mockClient = {
+  query: mockQuery,
+  release: vi.fn(),
+};
+
+// Must mock server-only since flow-repo may transitively import db.ts in some paths
+vi.mock("server-only", () => ({}));
+
+describe("bootstrapFlow", () => {
+  beforeEach(() => {
+    mockQuery.mockReset();
+    mockQuery.mockResolvedValue({ rows: [], rowCount: 0 });
+  });
+
+  it("inserts flow and branch with parametrized name", async () => {
+    const { bootstrapFlow } = await import("./flow-repo");
+    await bootstrapFlow(mockClient as unknown as PoolClient, "my-flow", "My Custom Name");
+
+    // First call: flow upsert with name param
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.stringContaining("INSERT INTO flow"),
+      expect.arrayContaining(["my-flow", "My Custom Name", "my-flow-main"]),
+    );
+
+    // Second call: branch insert
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.stringContaining("INSERT INTO branch"),
+      expect.arrayContaining(["my-flow-main", "my-flow"]),
+    );
   });
 });

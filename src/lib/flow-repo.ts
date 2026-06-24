@@ -107,11 +107,36 @@ async function insertGraph(
   }
 }
 
+/**
+ * Create flow + main branch rows idempotently (single transaction).
+ * Caller must be inside a BEGIN'd transaction on the given PoolClient.
+ */
+export async function bootstrapFlow(
+  client: PoolClient,
+  flowId: string,
+  name: string,
+): Promise<void> {
+  const branchId = `${flowId}-main`;
+  await client.query(
+    `INSERT INTO flow (id, name, default_branch_id)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, default_branch_id = EXCLUDED.default_branch_id`,
+    [flowId, name, branchId],
+  );
+  await client.query(
+    `INSERT INTO branch (id, flow_id, name)
+     VALUES ($1, $2, 'main')
+     ON CONFLICT (id) DO NOTHING`,
+    [branchId, flowId],
+  );
+}
+
 export async function saveFlow(
   pool: Pool,
   flowId: string,
   doc: GraphDocument,
   branchId: string = `${flowId}-main`,
+  name: string = flowId,
 ): Promise<void> {
   const c: PoolClient = await pool.connect();
   try {
@@ -122,20 +147,11 @@ export async function saveFlow(
     // saveFlow just rewrites their live tables (a write to an unknown branch
     // FK-fails, which the route guard turns into a clean 400 first).
     if (branchId === `${flowId}-main`) {
-      await c.query(
-        `INSERT INTO flow (id, name, default_branch_id)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (id) DO UPDATE SET default_branch_id = EXCLUDED.default_branch_id`,
-        [flowId, "Demo Flow", branchId],
-      );
-
-      await c.query(
-        `INSERT INTO branch (id, flow_id, name)
-         VALUES ($1, $2, 'main')
-         ON CONFLICT (id) DO NOTHING`,
-        [branchId, flowId],
-      );
+      await bootstrapFlow(c, flowId, name);
     }
+
+    // Bump updated_at on every save regardless of branch
+    await c.query(`UPDATE flow SET updated_at = now() WHERE id = $1`, [flowId]);
 
     // Delete in FK-safe order: edges → node_view → node
     await c.query(`DELETE FROM edge WHERE branch_id = $1`, [branchId]);
