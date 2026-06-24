@@ -1,4 +1,4 @@
-import { describe, it, expect, afterAll } from "vitest";
+import { describe, it, expect, afterAll, vi } from "vitest";
 import { Pool } from "pg";
 import {
   saveFlow,
@@ -10,9 +10,10 @@ import {
   createBranch,
   branchExists,
   persistRun,
+  listExecLog,
 } from "./flow-repo";
 import type { GraphDocument } from "@/lib/contract";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 
 // Skips automatically when DATABASE_URL is absent — keeps `npm run test` green
 // at 46 (the existing baseline) with no DB available.
@@ -309,5 +310,152 @@ describe.skipIf(!process.env.DATABASE_URL)("B09 — sequential persistRun build 
     // commit2 chains onto commit1 (FOR UPDATE serialized the head read) —
     // a linear C0→A→B chain, NOT two commits both parented at null.
     expect(byId.get(commit2)!.parentId).toBe(commit1);
+  });
+});
+
+const stripeOnlyDoc: GraphDocument = {
+  nodes: [
+    {
+      id: "n-stripe",
+      type: "action.stripe.charge",
+      params: { amount: 100, currency: "usd" },
+      isDraftSafe: false,
+    },
+  ],
+  edges: [],
+  views: [],
+};
+
+function deterministicExecId(
+  flowId: string,
+  branch: string | undefined,
+  nodeId: string,
+  request: Record<string, unknown>,
+): string {
+  return createHash("sha256")
+    .update(`${flowId}:${branch ?? "main"}:${nodeId}:${JSON.stringify(request)}`)
+    .digest("hex")
+    .slice(0, 32);
+}
+
+describe.skipIf(!process.env.DATABASE_URL)("B25 — re-run exec_log PK collision", () => {
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  const flowId = `test-b25-${Date.now()}`;
+
+  afterAll(() => pool.end());
+
+  it("second persistRun with the same deterministic execId must not 500", async () => {
+    await saveFlow(pool, flowId, stripeOnlyDoc);
+
+    const request = { amount: 100, currency: "usd" };
+    const execId = deterministicExecId(flowId, undefined, "n-stripe", request);
+    const record = {
+      execId,
+      nodeId: "n-stripe",
+      actionType: "action.stripe.charge" as const,
+      request,
+      response: { chargeId: "mock", mock: true },
+      status: "success" as const,
+    };
+
+    await persistRun(pool, flowId, randomUUID(), stripeOnlyDoc, [record]);
+
+    await expect(
+      persistRun(pool, flowId, randomUUID(), stripeOnlyDoc, [record]),
+    ).resolves.toBeUndefined();
+  });
+});
+
+describe.skipIf(!process.env.DATABASE_URL)("B36 — listExecLog branch bleed", () => {
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  const flowId = `test-b36-${Date.now()}`;
+
+  afterAll(() => pool.end());
+
+  it("listExecLog must not return experiment-branch rows when scoped to main", async () => {
+    await saveFlow(pool, flowId, docA);
+    const cMain = randomUUID();
+    await commitFlow(pool, flowId, cMain, "main base");
+
+    const branchId = randomUUID();
+    await createBranch(pool, flowId, "experiment", cMain, branchId);
+
+    const mainExecId = randomUUID();
+    await persistRun(pool, flowId, randomUUID(), docA, [
+      {
+        execId: mainExecId,
+        nodeId: "n3",
+        actionType: "action.stripe.charge",
+        request: { amount: 100, currency: "usd" },
+        response: { mock: true },
+        status: "success",
+      },
+    ]);
+
+    const expExecId = randomUUID();
+    await persistRun(
+      pool,
+      flowId,
+      randomUUID(),
+      docA,
+      [
+        {
+          execId: expExecId,
+          nodeId: "n3",
+          actionType: "action.stripe.charge",
+          request: { amount: 100, currency: "usd" },
+          response: { mock: true },
+          status: "success",
+        },
+      ],
+      branchId,
+    );
+
+    const entries = await listExecLog(pool, flowId);
+    const ids = entries.map((e) => e.id);
+
+    expect(ids).toContain(mainExecId);
+    expect(ids).not.toContain(expExecId);
+  });
+});
+
+describe("B30 — ROLLBACK failure must not mask the original error", () => {
+  it("surfaces the insert error when ROLLBACK also rejects", async () => {
+    const insertError = new Error(
+      "duplicate key value violates unique constraint",
+    );
+    const rollbackError = new Error("Connection terminated unexpectedly");
+
+    const client = {
+      query: vi.fn(async (sql: string) => {
+        if (sql === "BEGIN" || sql === "COMMIT") return;
+        if (sql === "ROLLBACK") throw rollbackError;
+        if (sql.includes("SELECT head_commit_id")) {
+          return { rowCount: 1, rows: [{ head_commit_id: null }] };
+        }
+        if (sql.includes('INSERT INTO "commit"')) return;
+        if (sql.includes("UPDATE branch")) return;
+        if (sql.includes("INSERT INTO exec_log")) throw insertError;
+        return { rowCount: 0, rows: [] };
+      }),
+      release: vi.fn(),
+    };
+
+    const pool = {
+      connect: vi.fn().mockResolvedValue(client),
+    } as unknown as Pool;
+
+    await expect(
+      persistRun(pool, "demo", randomUUID(), stripeOnlyDoc, [
+        {
+          execId: "exec-1",
+          nodeId: "n-stripe",
+          actionType: "action.stripe.charge",
+          request: { amount: 100, currency: "usd" },
+          response: { mock: true },
+          status: "success",
+        },
+      ]),
+    ).rejects.toThrow("duplicate key value violates unique constraint");
   });
 });

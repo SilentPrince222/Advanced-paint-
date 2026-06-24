@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { diffFlow } from "@/lib/flow-client";
 import type { GraphDiff, FieldChange } from "@/lib/contract";
 
@@ -36,16 +36,20 @@ export function DiffView({ flowId, from, to, onClose }: DiffViewProps) {
   // Derive loading: neither result nor error arrived yet for the current (flowId,from,to)
   const loading = diff === null && error === null;
 
+  const fetchedRef = useRef<string | null>(null);
+
   useEffect(() => {
+    const key = `${flowId}:${from}:${to}`;
+    if (fetchedRef.current === key) return;
+    fetchedRef.current = key;
     let live = true;
+    setDiff(null);
+    setError(null);
     diffFlow(flowId, from, to)
       .then((d) => { if (live) { setError(null); setDiff(d); } })
       .catch((e: unknown) => { if (live) { setDiff(null); setError(String(e)); } });
     return () => {
       live = false;
-      // Reset for next invocation so loading shows while the new fetch is in flight
-      setDiff(null);
-      setError(null);
     };
   }, [flowId, from, to]);
 

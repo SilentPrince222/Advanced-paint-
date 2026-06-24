@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import { getDb } from "@/lib/db";
 import { loadFlow, persistRun, branchExists, type RunActionRecord } from "@/lib/flow-repo";
 import { runGraph, mockResponse } from "@/lib/interpreter";
@@ -44,6 +44,11 @@ export async function POST(
     const entries: ExecLogEntry[] = [];
 
     for (const s of actions) {
+      const normalizedBranch = branch ?? `${id}-main`;
+      const idempotencyKey = createHash("sha256")
+        .update(`${id}:${normalizedBranch}:${s.nodeId}:${JSON.stringify(s.request)}`)
+        .digest("hex")
+        .slice(0, 32);
       const execId = randomUUID();
       let response: Record<string, unknown>;
       let status: "success" | "failure" = "success";
@@ -51,14 +56,13 @@ export async function POST(
       if (mockMode) {
         response = mockResponse(s.type, execId);
       } else {
-        // Real execution path — currently supports stripe; others fall back to mock
-        const result = await executeAction(s.type, s.request, execId);
+        const result = await executeAction(s.type, s.request, idempotencyKey);
         if (result) {
           response = result.response;
           status = result.status;
         } else {
-          // No real executor for this action type — mock it
           response = mockResponse(s.type, execId);
+          status = "failure";
         }
       }
 

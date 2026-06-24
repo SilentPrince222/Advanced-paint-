@@ -268,6 +268,26 @@ describe("VersionPanel", () => {
     });
   });
 
+  it("B24 — duplicate 'main' names: fallback must bind to canonical main, not first match", async () => {
+    const canonicalMain = { ...mockMainBranch, id: "demo-main" };
+    const rogueMain = {
+      id: "rogue-main",
+      flowId: "demo",
+      name: "main",
+      headCommitId: "evil-head",
+      baseCommitId: null,
+    };
+    vi.mocked(listBranches).mockResolvedValue([rogueMain, canonicalMain]);
+
+    render(<VersionPanel />);
+
+    const select = await screen.findByRole("combobox");
+    await waitFor(() => {
+      expect(select).toHaveProperty("disabled", false);
+    });
+    expect(select).toHaveProperty("value", "demo-main");
+  });
+
   it("Branch button is disabled when the active branch has no headCommitId yet", async () => {
     const headlessMain = { ...mockMainBranch, headCommitId: null };
     vi.mocked(listCommits).mockResolvedValue([mockCommitMeta]);

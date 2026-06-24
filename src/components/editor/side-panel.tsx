@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useFlowStore } from "@/lib/flow-store";
 import { getVariant } from "@/lib/block-registry";
 import { paramSummary } from "@/lib/node-summary";
@@ -7,6 +8,41 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { BlockFieldSchema } from "@/lib/types";
+
+function NumberField({
+  field,
+  value,
+  onChange,
+}: {
+  field: BlockFieldSchema;
+  value: unknown;
+  onChange: (v: string | number) => void;
+}) {
+  const [raw, setRaw] = useState<string | null>(null);
+  const displayed = raw ?? (value === undefined || value === null ? "" : String(value));
+
+  return (
+    <Input
+      id={`field-${field.key}`}
+      type="text"
+      inputMode="decimal"
+      data-testid={`field-${field.key}`}
+      value={displayed}
+      placeholder={field.placeholder}
+      onChange={(e) => {
+        const v = e.target.value;
+        setRaw(v);
+        const n = Number(v);
+        if (v !== "" && !Number.isNaN(n) && Number.isFinite(n)) {
+          onChange(n);
+        } else {
+          onChange(v);
+        }
+      }}
+      onBlur={() => setRaw(null)}
+    />
+  );
+}
 
 const CREDENTIAL_OPTIONS = [
   { id: "demo/stripe-test", label: "Stripe test key" },
@@ -93,13 +129,10 @@ export function SidePanel() {
               />
             )}
             {field.type === "number" && (
-              <Input
-                id={`field-${field.key}`}
-                type="number"
-                data-testid={`field-${field.key}`}
-                value={String(node.data.params[field.key] ?? "")}
-                placeholder={field.placeholder}
-                onChange={(e) => setParam(field, Number(e.target.value))}
+              <NumberField
+                field={field}
+                value={node.data.params[field.key]}
+                onChange={(raw) => setParam(field, raw)}
               />
             )}
             {field.type === "select" && (

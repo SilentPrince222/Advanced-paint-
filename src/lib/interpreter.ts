@@ -76,11 +76,13 @@ function chooseEdges(
   node: GraphNode,
   outgoing: GraphDocument["edges"],
 ): GraphDocument["edges"] {
-  if (
-    node.type === "condition.if" &&
-    outgoing.some((e) => e.condition === "true" || e.condition === "false")
-  ) {
-    return outgoing.filter((e) => e.condition === "true");
+  if (node.type === "condition.if") {
+    const hasTrue = outgoing.some((e) => e.condition === "true");
+    const hasFalse = outgoing.some((e) => e.condition === "false");
+    if (hasTrue && hasFalse) {
+      return outgoing.filter((e) => e.condition === "true");
+    }
+    // Mixed (labeled + unlabeled) or only-false: follow all edges
   }
   return outgoing;
 }
@@ -91,9 +93,11 @@ export function runGraph(
 ): RunTrace {
   const byId = new Map<string, GraphNode>(doc.nodes.map((n) => [n.id, n]));
 
+  const triggers = doc.nodes.filter((n) => n.type.startsWith("trigger."));
   const start =
     (opts?.fromNodeId ? byId.get(opts.fromNodeId) : undefined) ??
-    doc.nodes.find((n) => n.type.startsWith("trigger."));
+    triggers.find((n) => doc.edges.some((e) => e.fromNodeId === n.id)) ??
+    triggers[0];
 
   if (!start) return { startNodeId: null, steps: [] };
 

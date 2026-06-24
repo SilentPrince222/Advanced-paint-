@@ -228,7 +228,7 @@ export async function persistRun(
 
     await c.query("COMMIT");
   } catch (e) {
-    await c.query("ROLLBACK");
+    try { await c.query("ROLLBACK"); } catch {}
     throw e;
   } finally {
     c.release();

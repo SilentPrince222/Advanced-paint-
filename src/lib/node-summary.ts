@@ -21,7 +21,8 @@ export function paramSummary(
 ): string {
   if (!variant || variant.fields.length === 0) return "";
   const parts: string[] = [];
-  for (const field of variant.fields.slice(0, 2)) {
+  for (const field of variant.fields) {
+    if (parts.length >= 2) break;
     const value = params[field.key];
     if (value === undefined || value === "") continue;
     const text =

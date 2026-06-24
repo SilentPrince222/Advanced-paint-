@@ -30,13 +30,9 @@ async function executeStripeCharge(
   }
 
   const amount =
-    typeof params.amount === "number" && params.amount > 0
-      ? params.amount
-      : 100;
+    typeof params.amount === "number" ? params.amount : 100;
   const currency =
-    typeof params.currency === "string" && params.currency.length > 0
-      ? params.currency
-      : "usd";
+    typeof params.currency === "string" ? params.currency : "usd";
 
   try {
     const charge = await stripe.charges.create(
@@ -62,7 +58,7 @@ async function executeStripeCharge(
     const message = err instanceof Error ? err.message : String(err);
     console.error("[stripe-executor] charge failed:", message);
     return {
-      response: { error: message },
+      response: { error: "charge_failed" },
       status: "failure",
     };
   }

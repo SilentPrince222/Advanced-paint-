@@ -51,6 +51,41 @@ describe("SidePanel", () => {
     ).toBe(250);
   });
 
+  it("B31 — clearing amount must not snap the field back to 0", () => {
+    useFlowStore.setState({ nodes: [stripeNode()], edges: [] });
+    render(<SidePanel />);
+
+    const input = screen.getByTestId("field-amount") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "" } });
+
+    expect(input.value).toBe("");
+    expect(useFlowStore.getState().nodes[0]!.data.params.amount).not.toBe(0);
+  });
+
+  it("B31 — typing a decimal must preserve the trailing dot while editing", () => {
+    const node = stripeNode();
+    node.data.params = { currency: "usd" };
+    useFlowStore.setState({ nodes: [node], edges: [] });
+    render(<SidePanel />);
+
+    const input = screen.getByTestId("field-amount") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "2." } });
+
+    expect(input.value).toBe("2.");
+  });
+
+  it("B31 — intermediate scientific notation must not poison the store with NaN", () => {
+    useFlowStore.setState({ nodes: [stripeNode()], edges: [] });
+    render(<SidePanel />);
+
+    fireEvent.change(screen.getByTestId("field-amount"), {
+      target: { value: "1e" },
+    });
+
+    const amount = useFlowStore.getState().nodes[0]!.data.params.amount;
+    expect(Number.isNaN(amount)).toBe(false);
+  });
+
   it("credential select sets credentialRef to demo/stripe-test", () => {
     useFlowStore.setState({ nodes: [stripeNode()], edges: [] });
     render(<SidePanel />);

@@ -154,6 +154,90 @@ describe("runGraph", () => {
     expect(trace.steps.map((s) => s.nodeId)).toEqual(["A", "B"]);
   });
 
+  it("B14 — mixed labeled/unlabeled condition edges must not drop unlabeled fan-out", () => {
+    const doc: GraphDocument = {
+      nodes: [
+        { id: "t", type: "trigger.webhook", params: {}, isDraftSafe: true },
+        {
+          id: "c",
+          type: "condition.if",
+          params: { expression: "x" },
+          isDraftSafe: true,
+        },
+        {
+          id: "labeled",
+          type: "action.slack.post",
+          params: { channel: "#yes", message: "y" },
+          isDraftSafe: true,
+        },
+        {
+          id: "unlabeled",
+          type: "action.slack.post",
+          params: { channel: "#also", message: "z" },
+          isDraftSafe: true,
+        },
+      ],
+      edges: [
+        { id: "e1", fromNodeId: "t", toNodeId: "c" },
+        { id: "e2", fromNodeId: "c", toNodeId: "labeled", condition: "true" },
+        { id: "e3", fromNodeId: "c", toNodeId: "unlabeled" },
+      ],
+      views: [],
+    };
+
+    const trace = runGraph(doc);
+    expect(trace.steps.map((s) => s.nodeId)).toContain("unlabeled");
+  });
+
+  it("B15 — condition.if with only a 'false' edge must still reach downstream or signal", () => {
+    const doc: GraphDocument = {
+      nodes: [
+        { id: "t", type: "trigger.webhook", params: {}, isDraftSafe: true },
+        {
+          id: "c",
+          type: "condition.if",
+          params: { expression: "x" },
+          isDraftSafe: true,
+        },
+        {
+          id: "downstream",
+          type: "action.slack.post",
+          params: { channel: "#no", message: "n" },
+          isDraftSafe: true,
+        },
+      ],
+      edges: [
+        { id: "e1", fromNodeId: "t", toNodeId: "c" },
+        { id: "e2", fromNodeId: "c", toNodeId: "downstream", condition: "false" },
+      ],
+      views: [],
+    };
+
+    const trace = runGraph(doc);
+    expect(trace.steps.map((s) => s.nodeId)).toContain("downstream");
+  });
+
+  it("B16 — multiple triggers must not silently pick the first array entry", () => {
+    const doc: GraphDocument = {
+      nodes: [
+        { id: "t-first", type: "trigger.webhook", params: {}, isDraftSafe: true },
+        { id: "t-second", type: "trigger.schedule", params: { cron: "0 * * * *" }, isDraftSafe: true },
+        {
+          id: "only-from-second",
+          type: "action.slack.post",
+          params: { channel: "#scheduled", message: "hi" },
+          isDraftSafe: true,
+        },
+      ],
+      edges: [{ id: "e1", fromNodeId: "t-second", toNodeId: "only-from-second" }],
+      views: [],
+    };
+
+    const trace = runGraph(doc);
+    expect(trace.startNodeId).toBe("t-second");
+    expect(trace.steps.map((s) => s.nodeId)).toContain("only-from-second");
+  });
+
   it("(e) returns an empty trace when there is no trigger node", () => {
     const doc: GraphDocument = {
       nodes: [

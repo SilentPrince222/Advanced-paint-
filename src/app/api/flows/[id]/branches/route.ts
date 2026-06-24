@@ -45,6 +45,13 @@ export async function POST(
       return Response.json({ error: "missing fromCommitId" }, { status: 400 });
     }
 
+    if (body.name === "main") {
+      return Response.json(
+        { error: `branch 'main' already exists` },
+        { status: 409 },
+      );
+    }
+
     const newBranchId = randomUUID();
     const branch = await createBranch(
       getDb(),

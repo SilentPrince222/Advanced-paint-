@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Pool } from "pg";
+import { splitSqlStatements } from "../src/lib/sql-splitter";
 
 /**
  * Initialize the Aurora PostgreSQL schema (SPEC §3) via the `pg` driver.
@@ -25,38 +26,7 @@ async function main(): Promise<void> {
   const schemaPath = join(process.cwd(), "db", "schema.sql");
   const raw = readFileSync(schemaPath, "utf8");
 
-  // Strip full-line comments, then split into statements on ';'. A tiny
-  // state machine skips ';' inside $$ … $$ dollar-quoted function bodies so
-  // the trigger function (lines 90-93) stays one statement.
-  const cleaned = raw
-    .split("\n")
-    .filter((line) => !line.trim().startsWith("--"))
-    .join("\n");
-
-  const statements: string[] = [];
-  let current = "";
-  let inDollar = false;
-  for (let i = 0; i < cleaned.length; i++) {
-    if (cleaned[i] === "$" && cleaned[i + 1] === "$") {
-      inDollar = !inDollar;
-      current += "$$";
-      i++;
-      continue;
-    }
-    if (!inDollar && cleaned[i] === "-" && cleaned[i + 1] === "-") {
-      while (i < cleaned.length && cleaned[i] !== "\n") i++;  // skip inline comment to EOL
-      continue;
-    }
-    if (cleaned[i] === ";" && !inDollar) {
-      const stmt = current.trim();
-      if (stmt) statements.push(stmt);
-      current = "";
-      continue;
-    }
-    current += cleaned[i];
-  }
-  const tail = current.trim();
-  if (tail) statements.push(tail);
+  const statements = splitSqlStatements(raw);
 
   const pool = new Pool({
     connectionString: url,

@@ -20,6 +20,8 @@ export function VersionPanel() {
   const currentBranchId = useFlowStore((s) => s.currentBranchId);
   const setCurrentBranchId = useFlowStore((s) => s.setCurrentBranchId);
   const bumpExecLog = useFlowStore((s) => s.bumpExecLog);
+  const running = useFlowStore((s) => s.running);
+  const execLogNonce = useFlowStore((s) => s.execLogNonce);
 
   const [commits, setCommits] = useState<CommitMeta[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -52,13 +54,15 @@ export function VersionPanel() {
       })
       .catch(() => { /* non-fatal */ });
     return () => { live = false; };
-  }, []);
+  }, [execLogNonce]);
 
   // Fork source = the ACTIVE branch's head commit (BLOCKER 1 fix). commits[0]
   // is flow-scoped (wrong-graph risk); headCommitId is per-branch correct.
   // currentBranchId undefined ≡ main (store/store-route semantics), so resolve
   // the effective id the same way the selector's `value` does before the lookup.
-  const mainBranch = branches.find((b) => b.name === "main");
+  const mainBranch =
+    branches.find((b) => b.name === "main" && b.id === `${DEMO_FLOW_ID}-main`) ??
+    branches.find((b) => b.name === "main");
   const effectiveBranchId = currentBranchId ?? mainBranch?.id;
   const headCommitId =
     branches.find((b) => b.id === effectiveBranchId)?.headCommitId ?? null;
@@ -141,7 +145,7 @@ export function VersionPanel() {
           disabled={busy}
           maxLength={280}
         />
-        <Button size="sm" onClick={onCommit} disabled={busy}>
+        <Button size="sm" onClick={onCommit} disabled={busy || running}>
           Commit
         </Button>
       </div>

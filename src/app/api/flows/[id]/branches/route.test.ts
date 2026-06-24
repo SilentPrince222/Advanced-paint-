@@ -83,6 +83,21 @@ describe("POST /api/flows/[id]/branches", () => {
     const body = await res.json() as { error: string };
     expect(body.error).toContain("invalid JSON body");
   });
+
+  it("B24 — duplicate branch name 'main' → 409 conflict", async () => {
+    vi.mocked(createBranch).mockResolvedValueOnce({
+      id: "rogue-main",
+      flowId: "demo",
+      name: "main",
+      headCommitId: "c1",
+      baseCommitId: "c1",
+    });
+    const res = await POST(
+      makeReq({ name: "main", fromCommitId: "c1" }),
+      PARAMS,
+    );
+    expect(res.status).toBe(409);
+  });
 });
 
 describe("GET /api/flows/[id]/branches", () => {

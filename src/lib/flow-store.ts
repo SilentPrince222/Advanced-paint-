@@ -69,6 +69,9 @@ export interface FlowState {
   /** nonce to force ExecLogViewer re-fetch after runs/rollbacks */
   execLogNonce: number;
   bumpExecLog: () => void;
+  /** true while a run or save is in flight (gates mutating buttons globally) */
+  running: boolean;
+  setRunning: (v: boolean) => void;
 }
 
 export const useFlowStore = create<FlowState>((set, get) => ({
@@ -174,6 +177,9 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     const next = get().execLogNonce + 1;
     set({ execLogNonce: next });
   },
+
+  running: false,
+  setRunning: (v) => set({ running: v }),
 }));
 
 // Re-export for callers that derive UI purely from a node's `type`.
